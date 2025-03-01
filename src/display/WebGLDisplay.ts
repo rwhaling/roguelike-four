@@ -19,7 +19,8 @@ export class WebGLDisplay {
     public bgProgram: WebGLProgram;
     public lightProgram: WebGLProgram;
     public _options: object
-
+    public spriteSheetDims: { width: number; height: number } = { width: 32, height: 48 };
+    public spriteSize: number = 16;
 
     constructor(canvas: HTMLCanvasElement, options: object) {
         this._options = options;
@@ -99,6 +100,10 @@ export class WebGLDisplay {
                 console.log('image url:', tileSetBlobUrl);
                 console.log('tileSet:', tileSet);
                 const texture = glu.createTexture(this.gl, tileSet);
+                this.spriteSheetDims = {
+                    width: 32, // Number of sprites horizontally
+                    height: 48 // Number of sprites vertically
+                };
                 resolve(texture);
             };
             tileSet.onerror = (error) => {
@@ -167,13 +172,13 @@ export class WebGLDisplay {
         const gl = this.gl;
         const bgProgram = this.bgProgram;
 
-
         var positionAttributeLocation = gl.getAttribLocation(bgProgram, "a_position");
         var texcoordAttributeLocation = gl.getAttribLocation(bgProgram, "a_texcoord");
         var textureUniformLocation = gl.getUniformLocation(bgProgram, "u_texture");
         var tilemapLocation = gl.getUniformLocation(bgProgram, "u_tilemap");
         var mapGridSizeLocation = gl.getUniformLocation(bgProgram, "u_map_grid_size");
         var screenGridSizeLocation = gl.getUniformLocation(bgProgram, "u_screen_grid_size");
+        var spritesheetDimsLocation = gl.getUniformLocation(bgProgram, "u_spritesheet_dims");
       
         // Create a buffer and put three 2d clip space points in it
         var positionBuffer = gl.createBuffer();
@@ -184,8 +189,8 @@ export class WebGLDisplay {
         // let offset_adj_x = (10.0 - (offset_x)) / 4.0; // ((level_width / 2) - camera_pos) / (screen_grid_width / 2) 
         // let offset_adj_y = -1 * (9.0 - (offset_y)) / 4.0; // the +1 is probably an error from inverting the texture array's y
 
-        let screen_grid_width = 8.0;
-        let screen_grid_height = 8.0;
+        let screen_grid_width = window.gameParams.zoom;
+        let screen_grid_height = window.gameParams.zoom;
 
         let screen_grid_adj_x = screen_grid_width / 2.0;
         let screen_grid_adj_y = screen_grid_height / 2.0;
@@ -301,6 +306,7 @@ export class WebGLDisplay {
        
         gl.uniform2f(screenGridSizeLocation, screen_grid_width, screen_grid_height);
         gl.uniform2f(mapGridSizeLocation, this.mapWidth, this.mapHeight);
+        gl.uniform2f(spritesheetDimsLocation, this.spriteSheetDims.width, this.spriteSheetDims.height);
         // draw
         var primitiveType = gl.TRIANGLE_STRIP;
         var offset = 0;
@@ -319,87 +325,89 @@ export class WebGLDisplay {
         var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
         var texcoordAttributeLocation = gl.getAttribLocation(program, "a_texcoord");
         var lightcoordUniformLocation = gl.getUniformLocation(program, "u_lightcoords");
+        var gridSizeUniformLocation = gl.getUniformLocation(program, "u_grid_size");
 
-        // Create a buffer and put three 2d clip space points in it
+        // Create a fullscreen quad (-1 to 1 in both dimensions)
         var positionBuffer = gl.createBuffer();
-
-        // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         var positions = [
-            -1.0, -1.0,
-            1.0, -1.0,
-            -1.0, 1.0,
-            1.0, 1.0
+            -1.0, -1.0,  // bottom-left
+            1.0, -1.0,   // bottom-right
+            -1.0, 1.0,   // top-left
+            1.0, 1.0     // top-right
         ];
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
-        // Create a vertex array object (attribute state)
+        // Set up vertex array
         var vao = gl.createVertexArray();
-
-        // and make it the one we're currently working with
         gl.bindVertexArray(vao);
-
-        // Turn on the attribute
         gl.enableVertexAttribArray(positionAttributeLocation);
+        
+        var size = 2;
+        var type = gl.FLOAT;
+        var normalize = false;
+        var stride = 0;
+        var offset = 0;
+        gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
 
-        // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-        var size = 2;          // 2 components per iteration
-        var type = gl.FLOAT;   // the data is 32bit floats
-        var normalize = false; // don't normalize the data
-        var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-        var offset = 0;        // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            positionAttributeLocation, size, type, normalize, stride, offset);
-
-        // create the texcoord buffer, make it the current ARRAY_BUFFER
-        // and copy in the texcoord values
+        // Set up texcoord buffer - these are normalized coordinates (0 to 1)
         var texcoordBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
         gl.bufferData(
             gl.ARRAY_BUFFER,
-            new Float32Array(positions),
+            new Float32Array([
+                0.0, 0.0,  // bottom-left
+                1.0, 0.0,  // bottom-right
+                0.0, 1.0,  // top-left
+                1.0, 1.0   // top-right
+            ]),
             gl.STATIC_DRAW);
          
-        // Turn on the attribute
         gl.enableVertexAttribArray(texcoordAttributeLocation);
-         
-        // Tell the attribute how to get data out of texcoordBuffer (ARRAY_BUFFER)
-        var size = 2;          // 2 components per iteration
-        var type = gl.FLOAT;   // the data is 32bit floating point values
-        var normalize = true;  // convert from 0-255 to 0.0-1.0
-        var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next texcoord
-        var offset = 0;        // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            texcoordAttributeLocation, size, type, normalize, stride, offset);  
+        
+        var size = 2;
+        var type = gl.FLOAT;
+        var normalize = false;  // Already normalized coordinates
+        var stride = 0;
+        var offset = 0;
+        gl.vertexAttribPointer(texcoordAttributeLocation, size, type, normalize, stride, offset);  
 
-        // Tell it to use our program (pair of shaders)
+        // Tell it to use our program
         gl.useProgram(program);
-
-        // Bind the attribute/buffer set we want.
         gl.bindVertexArray(vao);
 
-        // timing variables, comment out to disable.
+        // Set the grid size uniform
+        const gridSize = window.gameParams.zoom;
+        gl.uniform1f(gridSizeUniformLocation, gridSize);
+
+        // Set time variables
         let now = Date.now();
         let t_location = gl.getUniformLocation(program, 't');    
         let t = (Math.sin(now / 200) + 1.0) / 2.0;
         gl.uniform1f(t_location, t);
-      
-        let t_raw =  now / 500 % 100;
-      
+        
+        let t_raw = now / 500 % 100;
         let t_raw_location = gl.getUniformLocation(program, 't_raw');  
         gl.uniform1f(t_raw_location, t_raw);
 
+        // Calculate light positions in normalized coordinates (0-1)
+        const gridUnit = 1.0 / gridSize;
         
-        // pass the actual light locations
+        // Convert from world grid coordinates to normalized texture coordinates [0,1]
+        // Add half gridUnit offset to center the light in each cell
         let lightcoords = [
-            (2 * (4.5 + light1_x - camera_x) / 8.0) - 1,
-            1 - (2 * (3.5 + light1_y - camera_y) / 8.0), // TODO flip y
-            (2 * (4.5 + light2_x - camera_x) / 8.0) - 1,
-            1 - (2 * (3.5 + light2_y - camera_y) / 8.0),
+            // First light
+            0.5 + (light1_x - camera_x + 0.5) * gridUnit,
+            0.5 - (light1_y - camera_y + 0.5) * gridUnit,  // Flip Y and add half-cell offset
+            
+            // Second light
+            0.5 + (light2_x - camera_x + 0.5) * gridUnit,
+            0.5 - (light2_y - camera_y + 0.5) * gridUnit   // Flip Y and add half-cell offset
         ];
+        
         gl.uniform2fv(lightcoordUniformLocation, lightcoords);
 
-        // draw
+        // Draw
         var primitiveType = gl.TRIANGLE_STRIP;
         var offset = 0;
         var count = 4;
@@ -414,46 +422,47 @@ export class WebGLDisplay {
         var texcoordAttributeLocation = gl.getAttribLocation(program, "a_texcoord");
         var spriteTranspUniformLocation = gl.getUniformLocation(program,"u_sprite_transp");
         var auraColorUniformLocation = gl.getUniformLocation(program,"u_aura_color");
+        var gridSizeUniformLocation = gl.getUniformLocation(program,"u_grid_size");
+        var spritesheetDimsLocation = gl.getUniformLocation(program, "u_spritesheet_dims");
+        var spriteSizeLocation = gl.getUniformLocation(program, "u_sprite_size");
 
         let now = Date.now();
 
-        // Create a buffer and put three 2d clip space points in it
-        var positionBuffer = gl.createBuffer();
+        // Use the same zoom logic as in drawBackground
+        let screen_grid_width = window.gameParams.zoom;
+        let screen_grid_height = window.gameParams.zoom;
 
-        // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        // Calculate position relative to camera
+        // Adjust Y-coordinate to match WebGL coordinate system (flipping Y)
+        const relX = grid_x - camera_x;
+        const relY = -(grid_y - camera_y); // Negate Y here to flip coordinates
 
-        grid_x = 4 + grid_x - camera_x;
-        grid_y = 4 + camera_y - grid_y;
-
-        let positions = [
-            grid_x, grid_y,
-            grid_x + 1, grid_y,
-            grid_x, grid_y + 1,
-            grid_x + 1, grid_y + 1
+        // Create positions with correctly flipped Y coordinates
+        var positions = [
+            relX, relY - 1,           // bottom-left (flipped Y)
+            relX + 1, relY - 1,       // bottom-right (flipped Y)
+            relX, relY,               // top-left (flipped Y)
+            relX + 1, relY            // top-right (flipped Y)
         ];
 
+        // Create a buffer and put positions in it
+        var positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
         // Create a vertex array object (attribute state)
         var vao = gl.createVertexArray();
-
-        // and make it the one we're currently working with
         gl.bindVertexArray(vao);
-
-        // Turn on the attribute
         gl.enableVertexAttribArray(positionAttributeLocation);
+        
+        var size = 2;
+        var type = gl.FLOAT;
+        var normalize = false;
+        var stride = 0;
+        var offset = 0;
+        gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
 
-        // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-        var size = 2;          // 2 components per iteration
-        var type = gl.FLOAT;   // the data is 32bit floats
-        var normalize = false; // don't normalize the data
-        var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-        var offset = 0;        // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            positionAttributeLocation, size, type, normalize, stride, offset);
-
-        // create the texcoord buffer, make it the current ARRAY_BUFFER
+        // Create the texcoord buffer, make it the current ARRAY_BUFFER
         // and copy in the texcoord values
         var texcoordBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
@@ -466,16 +475,20 @@ export class WebGLDisplay {
         gl.enableVertexAttribArray(texcoordAttributeLocation);
          
         // Tell the attribute how to get data out of texcoordBuffer (ARRAY_BUFFER)
-        var size = 2;          // 2 components per iteration
-        var type = gl.FLOAT;   // the data is 32bit floating point values
-        var normalize = true;  // convert from 0-255 to 0.0-1.0
-        var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next texcoord
-        var offset = 0;        // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            texcoordAttributeLocation, size, type, normalize, stride, offset);  
+        var size = 2;
+        var type = gl.FLOAT;
+        var normalize = true;
+        var stride = 0;
+        var offset = 0;
+        gl.vertexAttribPointer(texcoordAttributeLocation, size, type, normalize, stride, offset);  
 
         // Tell it to use our program (pair of shaders)
         gl.useProgram(program);
+
+        // Pass the grid size to the shader
+        gl.uniform1f(gridSizeUniformLocation, screen_grid_width);
+        gl.uniform2f(spritesheetDimsLocation, this.spriteSheetDims.width, this.spriteSheetDims.height);
+        gl.uniform1f(spriteSizeLocation, this.spriteSize);
 
         // Bind the attribute/buffer set we want.
         gl.bindVertexArray(vao);
@@ -500,13 +513,9 @@ export class WebGLDisplay {
 
     // Add this helper method to the WebGLDisplay class
     private spriteCoords(sprite_pos_x: number, sprite_pos_y: number): number[] {
-        let t_width = 512; // 32 sprites
-        let t_height = 768; // 48 sprites
-
-        let sprite_size = 16;
-
-        let t_sprite_width = t_width / sprite_size;
-        let t_sprite_height = t_height / sprite_size;
+        let t_width = this.spriteSheetDims.width * this.spriteSize;
+        let t_height = this.spriteSheetDims.height * this.spriteSize;
+        let sprite_size = this.spriteSize;
         
         let sprite_coord_l_x = (sprite_pos_x * sprite_size) / t_width;
         let sprite_coord_r_x = ((sprite_pos_x + 1) * sprite_size) / t_width;

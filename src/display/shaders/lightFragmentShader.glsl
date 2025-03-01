@@ -9,6 +9,7 @@ uniform sampler2D u_texture;
 uniform float t;
 uniform float t_raw;
 uniform vec2 u_lightcoords[2];
+uniform float u_grid_size; // Add grid size uniform
 // we need to declare an output for the fragment shader
 out vec4 outColor;
 
@@ -40,24 +41,64 @@ float noise(vec3 p){
 
 void main() {
   float dist = 1.0;
-  int i;
-  for (i = 0; i < 2; i++) {
-      float this_dist = length((round((v_texcoord) * 16.0) - round((u_lightcoords[i]) * 16.0)) / 16.0);
+  
+  // Fixed pixelation resolution - this keeps the light quantization consistent 
+  // regardless of zoom level
+  float pixelationResolution = 64.0;
+  
+  for (int i = 0; i < 2; i++) {
+      // Calculate pixelated distance with fixed resolution
+      float this_dist = length(
+          (floor(v_texcoord * pixelationResolution) / pixelationResolution) - 
+          (floor(u_lightcoords[i] * pixelationResolution) / pixelationResolution)
+      );
+      
       if (this_dist < dist) {
-        dist = this_dist;
+          dist = this_dist;
       }
   }
-//   float dist = length(floor((v_texcoord - u_lightcoords[0]) * 16.0) / 16.0);
-//   float dist = min_dist;
+
+  // Scale light radius based on zoom
+  float lightRadius = 0.20 * (8.0 / u_grid_size);
+  float fadeRadius = 0.40 * (8.0 / u_grid_size);
+  
+  // Fixed noise scale that doesn't change with zoom
+  float noiseScale = 16.0;
+  
   float trans = 0.0;
-  if (dist < 0.30) {
-    trans = 0.0;
-  } else if (dist < 0.50) {
-    trans = (dist - 0.30) * 1.5;
-    trans = trans + (trans * abs(noise(vec3(round(v_texcoord.x * 16.0),round(v_texcoord.y * 16.0),round(t_raw * 50.0) / 10.0))));    
+  if (dist < lightRadius) {
+      trans = 0.0;
+  } else if (dist < fadeRadius) {
+      // Create a step function effect for the blocky transition
+      // Use more steps at larger zoom levels for better detail
+      int steps = 8;  // Fixed number of transition steps
+      float step = floor((dist - lightRadius) / (fadeRadius - lightRadius) * float(steps)) / float(steps);
+      trans = step * 0.6;
+      
+      // Scale world coordinates to fixed-size noise cells
+      vec2 noiseCoord = floor(v_texcoord * noiseScale * u_grid_size / 8.0) / noiseScale;
+      
+      float noiseVal = noise(vec3(
+          noiseCoord.x * 8.0, 
+          noiseCoord.y * 8.0, 
+          floor(t_raw * 5.0)
+      ));
+      
+      trans = trans + step * abs(noiseVal) * 0.3;
   } else {
-    trans = 0.30 + (dist - 0.50) * 0.6;
-    trans = trans + (trans * abs(noise(vec3(round(v_texcoord.x * 16.0),round(v_texcoord.y * 16.0),round(t_raw * 50.0) / 10.0))));
+      trans = 0.6 + step(fadeRadius, dist) * 0.2;
+      
+      vec2 noiseCoord = floor(v_texcoord * noiseScale * u_grid_size / 8.0) / noiseScale;
+      
+      float noiseVal = noise(vec3(
+          noiseCoord.x * 8.0, 
+          noiseCoord.y * 8.0, 
+          floor(t_raw * 5.0)
+      ));
+      
+      trans = trans + abs(noiseVal) * 0.1;
+      trans = min(trans, 0.95);
   }
-  outColor = vec4(0.0,0.0,0.0,trans);
+  
+  outColor = vec4(0.0, 0.0, 0.0, trans);
 }

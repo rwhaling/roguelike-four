@@ -10,6 +10,10 @@ uniform vec4 u_sprite_transp;
 uniform vec4 u_aura_color;
 uniform float t;
 uniform float t_raw;
+// Add uniforms for sprite sheet dimensions
+uniform vec2 u_spritesheet_dims; // Number of sprites in width and height
+uniform float u_sprite_size; // Size of one sprite in pixels (16.0)
+
 // we need to declare an output for the fragment shader
 out vec4 outColor;
 
@@ -45,20 +49,18 @@ void main() {
   // remove this when ready
   // return;
 
-  if (outColor == vec4(0.0,0.0,0.0,0.0)) {
-    // if (mod(v_texcoord.y * 352.0,16.0) > 14.0) {
-    //   return;         
-    // } else if (mod(v_texcoord.y * 352.0,16.0) < 2.0) {
-    //   return;         
-    // }
+  // Calculate pixel sizes based on uniforms
+  float sheet_width_px = u_spritesheet_dims.x * u_sprite_size;
+  float sheet_height_px = u_spritesheet_dims.y * u_sprite_size;
 
-    if (mod(v_texcoord.y * 768.0,16.0) > 15.0) {
+  if (outColor == vec4(0.0,0.0,0.0,0.0)) {
+    if (mod(v_texcoord.y * sheet_height_px, u_sprite_size) > u_sprite_size - 1.0) {
       return;         
-    } else if (mod(v_texcoord.y * 768.0,16.0) < 1.0) {
+    } else if (mod(v_texcoord.y * sheet_height_px, u_sprite_size) < 1.0) {
       return;         
-    } else if (mod(v_texcoord.x * 512.0,16.0) > 15.0) {
+    } else if (mod(v_texcoord.x * sheet_width_px, u_sprite_size) > u_sprite_size - 1.0) {
       return;
-    } else if (mod(v_texcoord.x * 512.0,16.0) < 1.0) {
+    } else if (mod(v_texcoord.x * sheet_width_px, u_sprite_size) < 1.0) {
       return;
     }
 
@@ -70,20 +72,24 @@ void main() {
 
     vec4 blurredColor = vec4(0.0,0.0,0.0,0.0);
 
-    vec4 blurDown1 = texture(u_texture, v_texcoord + vec2(0.0, 0.00130));
-    if (mod(v_texcoord.y * 768.0 + 1.0,16.0) <= 15.0) {
+    // Calculate blur offsets
+    float y_offset = 1.0 / sheet_height_px;
+    float x_offset = 1.0 / sheet_width_px;
+    
+    vec4 blurDown1 = texture(u_texture, v_texcoord + vec2(0.0, y_offset));
+    if (mod(v_texcoord.y * sheet_height_px + 1.0, u_sprite_size) <= u_sprite_size - 1.0) {
         blurredColor += blurDown1;
     }
-    vec4 blurUp1 = texture(u_texture, v_texcoord + vec2(0.0, -0.00130));
-    if (mod(v_texcoord.y * 768.0 - 1.0,16.0) >= 1.0) {
+    vec4 blurUp1 = texture(u_texture, v_texcoord + vec2(0.0, -y_offset));
+    if (mod(v_texcoord.y * sheet_height_px - 1.0, u_sprite_size) >= 1.0) {
         blurredColor += blurUp1;
     }
-    vec4 blurLeft1 = texture(u_texture, v_texcoord + vec2(0.00195, 0.0));
-    if (mod(v_texcoord.x * 512.0 + 1.0,16.0) <= 15.0) {
+    vec4 blurLeft1 = texture(u_texture, v_texcoord + vec2(x_offset, 0.0));
+    if (mod(v_texcoord.x * sheet_width_px + 1.0, u_sprite_size) <= u_sprite_size - 1.0) {
         blurredColor += blurLeft1;
     }
-    vec4 blurRight1 = texture(u_texture, v_texcoord + vec2(-0.00195, 0.0));
-    if (mod(v_texcoord.x * 512.0 - 1.0,16.0) >= 1.0) {
+    vec4 blurRight1 = texture(u_texture, v_texcoord + vec2(-x_offset, 0.0));
+    if (mod(v_texcoord.x * sheet_width_px - 1.0, u_sprite_size) >= 1.0) {
         blurredColor += blurRight1;
     }
 
@@ -93,7 +99,15 @@ void main() {
     // vec4 blurredColor = blurDown1 + blurUp1 + blurLeft1 + blurRight1;
     // outColor = blurredColor;
     if (blurredColor != vec4(0.0,0.0,0.0,0.0)) {
-      vec4 noiseColor = mix(u_aura_color,auraHighlightColor,abs(noise(vec3(floor(v_texcoord.x * 512.0),floor(v_texcoord.y * 768.0),t_raw * 5.0))));
+      vec4 noiseColor = mix(
+        u_aura_color,
+        auraHighlightColor,
+        abs(noise(vec3(
+          floor(v_texcoord.x * sheet_width_px),
+          floor(v_texcoord.y * sheet_height_px),
+          t_raw * 5.0
+        )))
+      );
     //   vec4 noiseColor = vec4(1.0 - t,1.0-t,1.0 - t,1) * (0.4 * blurDown1 + 0.6 * blurDown2) * abs(noise(vec3(floor(v_texcoord.x * 512.0),floor(v_texcoord.y * 768.0),t_raw)));
       outColor = noiseColor;
     //   if (length(noiseColor) >= 0.6) {
