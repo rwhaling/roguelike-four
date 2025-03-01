@@ -44,15 +44,31 @@ float noise(vec3 p){
 }
 
 void main() {
-//   vec4 sprite_transp = vec4 (1.0,1.0,1.0,1.0);
-  outColor = texture(u_texture, v_texcoord) * u_sprite_transp;
-  // remove this when ready
-  // return;
-
+  // Adjust texture sampling with small inset to prevent seams
+  vec2 adjusted_texcoord = v_texcoord;
+  
   // Calculate pixel sizes based on uniforms
   float sheet_width_px = u_spritesheet_dims.x * u_sprite_size;
   float sheet_height_px = u_spritesheet_dims.y * u_sprite_size;
-
+  
+  // Calculate sprite grid position
+  vec2 sprite_pos = floor(v_texcoord * vec2(sheet_width_px, sheet_height_px) / u_sprite_size);
+  
+  // Calculate position within sprite (0-1 range)
+  vec2 sprite_local_pos = fract(v_texcoord * vec2(sheet_width_px, sheet_height_px) / u_sprite_size);
+  
+  // Apply small inset to avoid texture bleeding (0.01-0.99 instead of 0-1)
+  sprite_local_pos = mix(vec2(0.01), vec2(0.99), sprite_local_pos);
+  
+  // Recombine to get adjusted texture coordinates
+  adjusted_texcoord = (sprite_pos + sprite_local_pos) * u_sprite_size / vec2(sheet_width_px, sheet_height_px);
+  
+  // Use adjusted coordinates for the main texture sample
+  outColor = texture(u_texture, adjusted_texcoord) * u_sprite_transp;
+  
+  // Early return if you want to test just the adjusted sampling
+  // return;
+  
   if (outColor == vec4(0.0,0.0,0.0,0.0)) {
     if (mod(v_texcoord.y * sheet_height_px, u_sprite_size) > u_sprite_size - 1.0) {
       return;         

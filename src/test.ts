@@ -16,12 +16,12 @@ function init() {
 
 // Load the foreground and background sprite sheets
 function loadSpriteSheets() {
-    // First sprite sheet (foreground)
+    // First sprite sheet (foreground characters)
     let fgReq = new XMLHttpRequest();
-    let fgReqUrl = "tiny_dungeon_world_3_dark_test_7.png.enc.b64";
+    let fgReqUrl = "fg_characters.png"; // New foreground sprite sheet
     
-    // Second sprite sheet (background) - replace with your actual file
-    let bgReqUrl = "tiny_dungeon_world_3_dark_test_7.png.enc.b64"; // Change to your actual file
+    // Second sprite sheet (background tiles)
+    let bgReqUrl = "bg_tiles.png"; // New background sprite sheet
     
     // Load foreground tileset first
     if (fgReqUrl.endsWith(".png")) {
@@ -36,15 +36,20 @@ function loadSpriteSheets() {
                     loadBackgroundTileset(fgUrl, bgReqUrl);
                 }
                 reader.readAsDataURL(this.response);
+            } else if (this.readyState == 4) {
+                console.error("Failed to load foreground sprite sheet");
             }
         };
         fgReq.send(null);
     } else {
+        // Handle encrypted files if needed
         fgReq.open('GET', fgReqUrl, true);
         fgReq.onreadystatechange = function() {
             if(this.readyState == 4 && this.status == 200) {
                 const fgUrl = decryptAndCreateBlobUrl(this.responseText);
                 loadBackgroundTileset(fgUrl, bgReqUrl);
+            } else if (this.readyState == 4) {
+                console.error("Failed to load foreground sprite sheet");
             }
         };
         fgReq.send(null);
@@ -350,6 +355,10 @@ function updateSpritePosition(sprite: any, now: number, interval: number) {
     };
 }
 
+let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
+let orc_sprites = [[4,9],[6,9],[3,10],[5,10],[7,10],[4,11],[6,11]]
+let human_sprites = [[9,15],[11,15],[13,15],[8,16],[10,16],[12,16],[9,17],[11,17]]
+
 function initializeSpritePosition() {
     let rand_x, rand_y;
     let isValidPosition = false;
@@ -373,11 +382,29 @@ function initializeSpritePosition() {
         return null;
     }
     
+    // Pick one of the three sprite types randomly
+    const spriteTypeRoll = Math.floor(Math.random() * 3);
+    // const spriteTypeRoll = 2;
+    let selectedSprite;
+    
+    if (spriteTypeRoll === 0) {
+        // Pick undead sprite
+        selectedSprite = undead_sprites[Math.floor(Math.random() * undead_sprites.length)];
+    } else if (spriteTypeRoll === 1) {
+        // Pick orc sprite
+        selectedSprite = orc_sprites[Math.floor(Math.random() * orc_sprites.length)];
+    } else {
+        // Pick human sprite
+        selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
+    }
+
+    console.log("Selected sprite:", selectedSprite);
+    
     const sprite = {
         x: rand_x,
         y: rand_y,
-        sprite_x: Math.floor(Math.random() * 16),
-        sprite_y: Math.floor(Math.random() * 32),
+        sprite_x: selectedSprite[0],
+        sprite_y: selectedSprite[1],
         target_x: rand_x,
         target_y: rand_y,
         target_time: 250,
@@ -539,7 +566,6 @@ function updateNpcCount() {
     for (let i = 0; i < npcCount; i++) {
         const npc = initializeSpritePosition();
         if (npc) {
-            npc.sprite_y = Math.floor(Math.random() * 32); // Randomize appearance
             npc.movementDelay = 200 + Math.floor(Math.random() * 400); // Random delay
             successfullyCreated++;
         } else {
@@ -574,7 +600,6 @@ function resetSpritePositions() {
     for (let i = 0; i < npcCount; i++) {
         const npc = initializeSpritePosition();
         if (npc) {
-            npc.sprite_y = Math.floor(Math.random() * 32);
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
@@ -665,7 +690,7 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     const npcCount = window.gameParams.npcCount || 5;
     for (let i = 0; i < npcCount; i++) {
         const npc = initializeSpritePosition();
-        npc.sprite_y = Math.floor(Math.random() * 32);
+        // npc.sprite_y = Math.floor(Math.random() * 32);
         npc.movementDelay = 200 + Math.floor(Math.random() * 400);
     }
     
@@ -706,9 +731,9 @@ function makeMap() {
     
     for (let i = 0; i < grid_size; i++) {
         if ((i % mapWidth == 0) || (i % mapWidth == mapWidth-1)) {
-            map.push(22,5)
+            map.push(1,1)
         } else if (i <= mapWidth-1 || i >= grid_size - mapWidth) {
-            map.push(17,5);                
+            map.push(2,1);                
         } else {
             let r = Math.floor(Math.random() * options.length);
             let o = options[r];

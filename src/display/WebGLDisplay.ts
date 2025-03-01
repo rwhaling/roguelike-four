@@ -20,8 +20,8 @@ export class WebGLDisplay {
     public bgProgram: WebGLProgram;
     public lightProgram: WebGLProgram;
     public _options: object
-    public spriteSheetDims: { width: number; height: number } = { width: 32, height: 48 };
-    public bgSpriteSheetDims: { width: number; height: number } = { width: 32, height: 48 };
+    public spriteSheetDims: { width: number; height: number } = { width: 16, height: 96 };
+    public bgSpriteSheetDims: { width: number; height: number } = { width: 16, height: 96 };
     public spriteSize: number = 16;
 
     constructor(canvas: HTMLCanvasElement, options: object) {
@@ -111,16 +111,21 @@ export class WebGLDisplay {
                 console.log('tileSet:', tileSet);
                 const texture = glu.createTexture(this.gl, tileSet);
                 
-                // Update the appropriate dimensions based on which tileset we're loading
+                // Set NEAREST filtering to prevent texture bleeding
+                this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+                this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+                this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+                
+                // Update dimensions based on the new sprite sheets
                 if (isForeground) {
                     this.spriteSheetDims = {
-                        width: 32, // Number of sprites horizontally
-                        height: 48 // Number of sprites vertically
+                        width: 16, // New foreground sheet is 16 sprites wide
+                        height: 96 // New foreground sheet is 96 sprites tall
                     };
                 } else {
                     this.bgSpriteSheetDims = {
-                        width: 32, // Number of sprites horizontally - customize as needed
-                        height: 48 // Number of sprites vertically - customize as needed
+                        width: 16, // New background sheet is 16 sprites wide
+                        height: 96 // New background sheet is 96 sprites tall
                     };
                 }
                 
@@ -445,6 +450,7 @@ export class WebGLDisplay {
         var gridSizeUniformLocation = gl.getUniformLocation(program,"u_grid_size");
         var spritesheetDimsLocation = gl.getUniformLocation(program, "u_spritesheet_dims");
         var spriteSizeLocation = gl.getUniformLocation(program, "u_sprite_size");
+        var textureUniformLocation = gl.getUniformLocation(program, "u_texture");
 
         let now = Date.now();
 
@@ -509,6 +515,12 @@ export class WebGLDisplay {
         gl.uniform1f(gridSizeUniformLocation, screen_grid_width);
         gl.uniform2f(spritesheetDimsLocation, this.spriteSheetDims.width, this.spriteSheetDims.height);
         gl.uniform1f(spriteSizeLocation, this.spriteSize);
+
+        // Bind the foreground texture
+        var texUnit = 0;
+        gl.activeTexture(gl.TEXTURE0 + texUnit);
+        gl.bindTexture(gl.TEXTURE_2D, this.tileSetTexture);
+        gl.uniform1i(textureUniformLocation, texUnit);
 
         // Bind the attribute/buffer set we want.
         gl.bindVertexArray(vao);
