@@ -8,63 +8,102 @@ declare const noise: any;
 
 function init() {
     console.log(noise);
-    // var picture = document.getElementById("picture");
-    console.log("about to retrieve encrypted image")
-    var data = new XMLHttpRequest();
-
-    let req_url = "tiny_dungeon_world_3_dark_test_7.png.enc.b64"
-    if (req_url.endsWith(".png")) {
-        console.log("unencrypted png")
-        data.responseType = 'blob';
-        data.open('GET', req_url, true);
-        data.onreadystatechange = load;
-        data.send(null);
-    } else {
-        data.open('GET', req_url, true);
-        data.onreadystatechange = load_encrypted;
-        data.send(null);
-    }
+    console.log("about to retrieve encrypted images")
+    
+    // Load both sprite sheets
+    loadSpriteSheets();
 }
 
-function load() {
-    console.log("ready?");
-    if(this.readyState == 4 && this.status==200){
-        console.log(this.responseURL,"got back data", this.response.length, "bytes")
-        if (this.responseURL.endsWith("png")) {
-            console.log("unencrypted", this.response)
-            var reader = new FileReader();
-            reader.onloadend = function() {
-                console.log("reader returned", reader.result)
-                setup(reader.result as string).catch(console.error);
+// Load the foreground and background sprite sheets
+function loadSpriteSheets() {
+    // First sprite sheet (foreground)
+    let fgReq = new XMLHttpRequest();
+    let fgReqUrl = "tiny_dungeon_world_3_dark_test_7.png.enc.b64";
+    
+    // Second sprite sheet (background) - replace with your actual file
+    let bgReqUrl = "tiny_dungeon_world_3_dark_test_7.png.enc.b64"; // Change to your actual file
+    
+    // Load foreground tileset first
+    if (fgReqUrl.endsWith(".png")) {
+        fgReq.responseType = 'blob';
+        fgReq.open('GET', fgReqUrl, true);
+        fgReq.onreadystatechange = function() {
+            if(this.readyState == 4 && this.status == 200) {
+                const reader = new FileReader();
+                reader.onloadend = function() {
+                    // Store foreground URL and try to load background
+                    const fgUrl = reader.result as string;
+                    loadBackgroundTileset(fgUrl, bgReqUrl);
+                }
+                reader.readAsDataURL(this.response);
             }
-            reader.readAsDataURL(this.response);
-        }
+        };
+        fgReq.send(null);
     } else {
-        console.log("sad path",this);
+        fgReq.open('GET', fgReqUrl, true);
+        fgReq.onreadystatechange = function() {
+            if(this.readyState == 4 && this.status == 200) {
+                const fgUrl = decryptAndCreateBlobUrl(this.responseText);
+                loadBackgroundTileset(fgUrl, bgReqUrl);
+            }
+        };
+        fgReq.send(null);
     }
 }
 
-function load_encrypted() {
-    console.log("ready?");
-    if(this.readyState == 4 && this.status==200){
-        console.log(this.responseURL,"got back data", this.response.length, "bytes")
-        console.log("encrypted")
-        console.log("Crypto:",Crypto);
-        var dec = Crypto.AES.decrypt(this.responseText, import.meta.env.VITE_ASSET_KEY);
-        var plain = Crypto.enc.Base64.stringify( dec );
+// Helper to decrypt and create blob URL
+function decryptAndCreateBlobUrl(encryptedText) {
+    var dec = Crypto.AES.decrypt(encryptedText, import.meta.env.VITE_ASSET_KEY);
+    var plain = Crypto.enc.Base64.stringify(dec);
 
-        let bytes = atob(plain)
-        const binary = new Array(bytes.length);
-        for (let i = 0; i < bytes.length; i++) {
-            binary[i] = bytes.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(binary);
+    let bytes = atob(plain)
+    const binary = new Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) {
+        binary[i] = bytes.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(binary);
 
-        const blob = new Blob([byteArray])
-        const url = URL.createObjectURL(blob)    
-        setup(url).catch(console.error);
+    const blob = new Blob([byteArray])
+    return URL.createObjectURL(blob);
+}
+
+// Load background tileset and then initialize
+function loadBackgroundTileset(fgUrl, bgReqUrl) {
+    // If no separate background, just use foreground
+    if (!bgReqUrl || bgReqUrl === "") {
+        setup(fgUrl, null).catch(console.error);
+        return;
+    }
+    
+    let bgReq = new XMLHttpRequest();
+    if (bgReqUrl.endsWith(".png")) {
+        bgReq.responseType = 'blob';
+        bgReq.open('GET', bgReqUrl, true);
+        bgReq.onreadystatechange = function() {
+            if(this.readyState == 4 && this.status == 200) {
+                const reader = new FileReader();
+                reader.onloadend = function() {
+                    setup(fgUrl, reader.result as string).catch(console.error);
+                }
+                reader.readAsDataURL(this.response);
+            } else if (this.readyState == 4) {
+                // Failed to load background, just use foreground
+                setup(fgUrl, null).catch(console.error);
+            }
+        };
+        bgReq.send(null);
     } else {
-        console.log("sad path",this);
+        bgReq.open('GET', bgReqUrl, true);
+        bgReq.onreadystatechange = function() {
+            if(this.readyState == 4 && this.status == 200) {
+                const bgUrl = decryptAndCreateBlobUrl(this.responseText);
+                setup(fgUrl, bgUrl).catch(console.error);
+            } else if (this.readyState == 4) {
+                // Failed to load background, just use foreground
+                setup(fgUrl, null).catch(console.error);
+            }
+        };
+        bgReq.send(null);
     }
 }
 
@@ -544,11 +583,12 @@ function resetSpritePositions() {
     lastNpcCount = allSprites.length - 1; // Subtract 1 for player
 }
 
-async function setup(tilesetBlobUrl: string) {
+// Modify the setup function to accept both tileset URLs
+async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) {
     // Wait for gameParams to be available if needed
     if (!window.gameParams) {
         console.log("Waiting for gameParams before setup...");
-        setTimeout(() => setup(tilesetBlobUrl), 100);
+        setTimeout(() => setup(fgTilesetBlobUrl, bgTilesetBlobUrl), 100);
         return;
     }
 
@@ -582,11 +622,12 @@ async function setup(tilesetBlobUrl: string) {
         document.body.appendChild(canvas);
     }
 
-    // Initialize WebGLDisplay
+    // Initialize WebGLDisplay with both tilesets
     display = new WebGLDisplay(canvas, {});
-    await display.initialize(tilesetBlobUrl);
+    
+    await display.initialize(fgTilesetBlobUrl, bgTilesetBlobUrl);
 
-    console.log("WebGLDisplay initialized");
+    console.log("WebGLDisplay initialized with both tilesets");
 
     // Add resize event listener
     window.addEventListener('resize', resizeCanvas);

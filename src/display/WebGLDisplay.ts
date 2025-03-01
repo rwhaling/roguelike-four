@@ -12,6 +12,7 @@ export class WebGLDisplay {
     public gl: WebGL2RenderingContext;
     public canvas: HTMLCanvasElement;
     public tileSetTexture: WebGLTexture | null = null;
+    public bgTileSetTexture: WebGLTexture | null = null;
     public tileMapTexture: WebGLTexture | null = null;
     public mapWidth: number = 0;
     public mapHeight: number = 0;
@@ -20,6 +21,7 @@ export class WebGLDisplay {
     public lightProgram: WebGLProgram;
     public _options: object
     public spriteSheetDims: { width: number; height: number } = { width: 32, height: 48 };
+    public bgSpriteSheetDims: { width: number; height: number } = { width: 32, height: 48 };
     public spriteSize: number = 16;
 
     constructor(canvas: HTMLCanvasElement, options: object) {
@@ -34,19 +36,27 @@ export class WebGLDisplay {
         return this.canvas;
     }
 
-    async initialize(tilesetBlobUrl: string) {
+    async initialize(fgTilesetBlobUrl: string, bgTilesetBlobUrl?: string) {
         // Initialize WebGL
-        await this.initGL(tilesetBlobUrl);  // Make sure to await this
+        await this.initGL(fgTilesetBlobUrl, bgTilesetBlobUrl);  // Modified to accept both URLs
         console.log("WebGL initialized successfully");
     }
 
-    async initGL(tileSetBlobUrl: string) {
+    async initGL(fgTileSetBlobUrl: string, bgTileSetBlobUrl?: string) {
         this.gl.enable(this.gl.BLEND);
         this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
         this.gl.clearColor(0, 0, 0, 1);
 
-        // Load tileset
-        this.tileSetTexture = await this.loadTileset(tileSetBlobUrl);
+        // Load tilesets
+        this.tileSetTexture = await this.loadTileset(fgTileSetBlobUrl, true);
+        
+        // Load background tileset if provided, otherwise use the foreground one
+        if (bgTileSetBlobUrl && bgTileSetBlobUrl !== fgTileSetBlobUrl) {
+            this.bgTileSetTexture = await this.loadTileset(bgTileSetBlobUrl, false);
+        } else {
+            this.bgTileSetTexture = this.tileSetTexture;
+            this.bgSpriteSheetDims = { ...this.spriteSheetDims };
+        }
 
         // Create shader programs
         this.fgProgram = this.createShaderProgram(fgVertexShaderSource, fgFragmentShaderSource);
@@ -93,21 +103,31 @@ export class WebGLDisplay {
         return t;
     }
 
-    public async loadTileset(tileSetBlobUrl: string): Promise<WebGLTexture> {
+    public async loadTileset(tileSetBlobUrl: string, isForeground: boolean): Promise<WebGLTexture> {
         return new Promise((resolve, reject) => {
             const tileSet = document.createElement("img");
             tileSet.onload = () => {
                 console.log('image url:', tileSetBlobUrl);
                 console.log('tileSet:', tileSet);
                 const texture = glu.createTexture(this.gl, tileSet);
-                this.spriteSheetDims = {
-                    width: 32, // Number of sprites horizontally
-                    height: 48 // Number of sprites vertically
-                };
+                
+                // Update the appropriate dimensions based on which tileset we're loading
+                if (isForeground) {
+                    this.spriteSheetDims = {
+                        width: 32, // Number of sprites horizontally
+                        height: 48 // Number of sprites vertically
+                    };
+                } else {
+                    this.bgSpriteSheetDims = {
+                        width: 32, // Number of sprites horizontally - customize as needed
+                        height: 48 // Number of sprites vertically - customize as needed
+                    };
+                }
+                
                 resolve(texture);
             };
             tileSet.onerror = (error) => {
-                console.error('Failed to load tileset:', error);
+                console.error(`Failed to load ${isForeground ? 'foreground' : 'background'} tileset:`, error);
                 reject(error);
             };
             tileSet.src = tileSetBlobUrl;
@@ -296,7 +316,7 @@ export class WebGLDisplay {
       
         var texUnit = 0;
         gl.activeTexture(gl.TEXTURE0 + texUnit);
-        gl.bindTexture(gl.TEXTURE_2D, this.tileSetTexture);
+        gl.bindTexture(gl.TEXTURE_2D, this.bgTileSetTexture);
         gl.uniform1i(textureUniformLocation, texUnit);
       
         texUnit = 1;
@@ -306,7 +326,7 @@ export class WebGLDisplay {
        
         gl.uniform2f(screenGridSizeLocation, screen_grid_width, screen_grid_height);
         gl.uniform2f(mapGridSizeLocation, this.mapWidth, this.mapHeight);
-        gl.uniform2f(spritesheetDimsLocation, this.spriteSheetDims.width, this.spriteSheetDims.height);
+        gl.uniform2f(spritesheetDimsLocation, this.bgSpriteSheetDims.width, this.bgSpriteSheetDims.height);
         // draw
         var primitiveType = gl.TRIANGLE_STRIP;
         var offset = 0;
