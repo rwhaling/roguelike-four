@@ -153,9 +153,36 @@ function calculateNewPosition(x, y, direction) {
     };
 }
 
+// Expand Sprite interface to include hitpoints
+interface Sprite {
+    x: number;
+    y: number;
+    sprite_x: number;
+    sprite_y: number;
+    target_x: number;
+    target_y: number;
+    target_time: number;
+    restUntil: number;
+    isPlayer: boolean;
+    faction: string;
+    // Damage effect properties
+    takingDamage?: boolean;
+    damageUntil?: number;
+    // Hitpoint properties
+    maxHitpoints: number;  // Maximum hitpoints
+    hitpoints: number;     // Current hitpoints
+    lastDamageTime?: number; // Timestamp of last damage for cooldown
+    destX: number;  // Destination X for smooth movement
+    destY: number;  // Destination Y for smooth movement
+    logicalX: number;  // Logical X position (for collision detection)
+    logicalY: number;  // Logical Y position (for collision detection)
+    lastMoveTime: number;
+    movementDelay: number;
+}
+
 // Spatial hash implementation
 class SpatialHash {
-    private grid: Map<string, Array<any>> = new Map();
+    private grid: { [key: string]: Sprite[] } = {};
     
     // Get a unique key for a grid position
     private getKey(x: number, y: number): string {
@@ -163,57 +190,66 @@ class SpatialHash {
     }
     
     // Add a sprite to the spatial hash
-    add(sprite: any): void {
-        // Add to current position
-        this.addToPosition(sprite, sprite.x, sprite.y);
+    add(sprite: Sprite): void {
+        const key = this.getKey(sprite.x, sprite.y);
+        if (!this.grid[key]) {
+            this.grid[key] = [];
+        }
+        if (!this.grid[key].includes(sprite)) {
+            this.grid[key].push(sprite);
+        }
         
         // Also reserve target position if it's different
         if (sprite.target_x !== sprite.x || sprite.target_y !== sprite.y) {
-            this.addToPosition(sprite, sprite.target_x, sprite.target_y);
+            const targetKey = this.getKey(sprite.target_x, sprite.target_y);
+            if (!this.grid[targetKey]) {
+                this.grid[targetKey] = [];
+            }
+            if (!this.grid[targetKey].includes(sprite)) {
+                this.grid[targetKey].push(sprite);
+            }
         }
-    }
-    
-    // Add sprite to a specific position in the hash
-    private addToPosition(sprite: any, x: number, y: number): void {
-        const key = this.getKey(x, y);
-        if (!this.grid.has(key)) {
-            this.grid.set(key, []);
-        }
-        this.grid.get(key).push(sprite);
     }
     
     // Remove a sprite from the spatial hash
-    remove(sprite: any): void {
-        // Remove from current position
-        this.removeFromPosition(sprite, sprite.x, sprite.y);
-        
-        // Also remove from target position if it's different
-        if (sprite.target_x !== sprite.x || sprite.target_y !== sprite.y) {
-            this.removeFromPosition(sprite, sprite.target_x, sprite.target_y);
-        }
-    }
-    
-    // Remove sprite from a specific position in the hash
-    private removeFromPosition(sprite: any, x: number, y: number): void {
-        const key = this.getKey(x, y);
-        const sprites = this.grid.get(key);
-        if (sprites) {
-            const index = sprites.indexOf(sprite);
-            if (index !== -1) {
-                sprites.splice(index, 1);
+    remove(sprite: Sprite): void {
+        const key = this.getKey(sprite.x, sprite.y);
+        if (this.grid[key]) {
+            this.grid[key] = this.grid[key].filter(s => s !== sprite);
+            if (this.grid[key].length === 0) {
+                delete this.grid[key];
             }
-            if (sprites.length === 0) {
-                this.grid.delete(key);
+        }
+        
+        // Also remove from target position if different
+        if (sprite.x !== sprite.target_x || sprite.y !== sprite.target_y) {
+            const targetKey = this.getKey(sprite.target_x, sprite.target_y);
+            if (this.grid[targetKey]) {
+                this.grid[targetKey] = this.grid[targetKey].filter(s => s !== sprite);
+                if (this.grid[targetKey].length === 0) {
+                    delete this.grid[targetKey];
+                }
             }
         }
     }
     
     // Update a sprite's position in the hash
-    update(sprite: any, oldX: number, oldY: number, oldTargetX: number, oldTargetY: number): void {
+    update(sprite: Sprite, oldX: number, oldY: number, oldTargetX: number, oldTargetY: number): void {
         // Remove from old positions
-        this.removeFromPosition(sprite, oldX, oldY);
-        if (oldTargetX !== oldX || oldTargetY !== oldY) {
-            this.removeFromPosition(sprite, oldTargetX, oldTargetY);
+        const oldKey = this.getKey(oldX, oldY);
+        if (this.grid[oldKey]) {
+            this.grid[oldKey] = this.grid[oldKey].filter(s => s !== sprite);
+            if (this.grid[oldKey].length === 0) {
+                delete this.grid[oldKey];
+            }
+        }
+        
+        const oldTargetKey = this.getKey(oldTargetX, oldTargetY);
+        if (this.grid[oldTargetKey] && oldTargetKey !== oldKey) {
+            this.grid[oldTargetKey] = this.grid[oldTargetKey].filter(s => s !== sprite);
+            if (this.grid[oldTargetKey].length === 0) {
+                delete this.grid[oldTargetKey];
+            }
         }
         
         // Add to new positions
@@ -221,21 +257,28 @@ class SpatialHash {
     }
     
     // Check if a position is occupied
-    isPositionOccupied(x: number, y: number, excludeSprite: any): boolean {
+    isPositionOccupied(x: number, y: number, excludeSprite: Sprite | null): boolean {
         const key = this.getKey(x, y);
-        const sprites = this.grid.get(key);
-        return sprites && sprites.some(sprite => sprite !== excludeSprite);
+        if (!this.grid[key]) return false;
+        
+        if (excludeSprite) {
+            // Check if any sprite other than the excluded one is at this position
+            return this.grid[key].some(sprite => sprite !== excludeSprite);
+        } else {
+            // Any sprite at this position means it's occupied
+            return this.grid[key].length > 0;
+        }
     }
     
     // Get all sprites at a position
-    getSpritesAt(x: number, y: number): Array<any> {
+    getSpritesAt(x: number, y: number): Sprite[] {
         const key = this.getKey(x, y);
-        return this.grid.get(key) || [];
+        return this.grid[key] || [];
     }
     
     // Clear the entire spatial hash
     clear(): void {
-        this.grid.clear();
+        this.grid = {};
     }
 }
 
@@ -248,12 +291,161 @@ function isPositionOccupied(x: number, y: number, excludeSprite: any): boolean {
     return spriteMap.isPositionOccupied(x, y, excludeSprite);
 }
 
-function updateSpritePosition(sprite: any, now: number, interval: number) {
+// Function to check for faction collision and apply damage effect
+function checkFactionCollision(sprite: Sprite, targetX: number, targetY: number): boolean {
+    // Get sprites at the target position
+    const spritesAtTarget = spriteMap.getSpritesAt(targetX, targetY);
+    
+    // If there are sprites and they're of a different faction, it's a collision
+    for (const targetSprite of spritesAtTarget) {
+        if (targetSprite !== sprite && targetSprite.faction !== sprite.faction) {
+            // Apply damage to the target sprite
+            applyDamage(sprite, targetSprite);
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Function to apply damage to a sprite
+function applyDamage(attacker: Sprite, target: Sprite) {
+    const now = Date.now();
+    
+    // Check if enough time has passed since the last damage (cooldown of 1 second)
+    if (!target.lastDamageTime || now - target.lastDamageTime >= 1000) {
+        // Apply damage effect
+        target.takingDamage = true;
+        target.damageUntil = now + 150; // Show damage effect for 500ms
+        target.lastDamageTime = now;
+        
+        // Reduce hitpoints
+        target.hitpoints -= 1;
+        
+        console.log(`${target.faction} sprite took damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
+        
+        // Check if the sprite is defeated
+        if (target.hitpoints <= 0) {
+            handleSpriteDefeat(target);
+        }
+    }
+}
+
+// Add an array to track defeated sprites during their death animation
+let dyingSprites: Sprite[] = [];
+
+// Function to handle sprite defeat
+function handleSpriteDefeat(sprite: Sprite) {
+    console.log(`${sprite.faction} sprite was defeated!`);
+    
+    // If it's the player, handle game over
+    if (sprite.isPlayer) {
+        console.log("Game over! Player defeated.");
+        // You could add game over logic here
+        // For now, we'll just restore player health for demonstration
+        sprite.hitpoints = sprite.maxHitpoints;
+        console.log("Player respawned with full health!");
+    } else {
+        // Instead of removing immediately, move to dyingSprites for animation
+        const index = allSprites.indexOf(sprite);
+        if (index > -1) {
+            // Remove from spatial hash first
+            spriteMap.remove(sprite);
+            
+            // Remove from the sprites array
+            allSprites.splice(index, 1);
+            
+            // Make sure the damage effect shows
+            sprite.takingDamage = true;
+            sprite.damageUntil = Date.now() + 150; // Show damage for 500ms
+            
+            // Add to dying sprites array
+            dyingSprites.push(sprite);
+            
+            console.log(`${sprite.faction} NPC removed from game. Remaining: ${countNpcsByFaction()[sprite.faction]}`);
+        }
+    }
+}
+
+// Count NPCs by faction
+function countNpcsByFaction() {
+    const counts = {
+        orc: 0,
+        undead: 0,
+        human: 0
+    };
+    
+    for (const sprite of allSprites) {
+        if (!sprite.isPlayer && sprite.faction) {
+            counts[sprite.faction]++;
+        }
+    }
+    
+    return counts;
+}
+
+// New function to handle respawning
+let lastOrcRespawnCheck = 0;
+let lastUndeadRespawnCheck = 0;
+
+function checkRespawns(now: number) {
+    const factionCounts = countNpcsByFaction();
+    
+    // Check orc respawns
+    if (now - lastOrcRespawnCheck >= window.gameParams.orcRespawnRate * 1000) {
+        lastOrcRespawnCheck = now;
+        
+        if (factionCounts.orc < window.gameParams.maxOrcCount) {
+            // Spawn exactly one orc
+            const npc = initializeSpritePosition(false, "orc");
+            if (npc) {
+                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+                console.log(`Respawned an orc. Current count: ${factionCounts.orc + 1}`);
+            }
+        }
+    }
+    
+    // Check undead respawns
+    if (now - lastUndeadRespawnCheck >= window.gameParams.undeadRespawnRate * 1000) {
+        lastUndeadRespawnCheck = now;
+        
+        if (factionCounts.undead < window.gameParams.maxUndeadCount) {
+            // Spawn exactly one undead
+            const npc = initializeSpritePosition(false, "undead");
+            if (npc) {
+                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+                console.log(`Respawned an undead. Current count: ${factionCounts.undead + 1}`);
+            }
+        }
+    }
+}
+
+// Add a function to display player health in the UI
+function displayPlayerHealth() {
+    if (sprite1) {
+        const healthPercent = (sprite1.hitpoints / sprite1.maxHitpoints) * 100;
+        
+        // Update the performance stats to include health
+        window.gameParams.performanceStats += ` | Health: ${sprite1.hitpoints}/${sprite1.maxHitpoints}`;
+        
+        // Add faction counts to stats
+        const counts = countNpcsByFaction();
+        window.gameParams.performanceStats += ` | Orcs: ${counts.orc}/${window.gameParams.maxOrcCount} | Undead: ${counts.undead}/${window.gameParams.maxUndeadCount}`;
+    }
+}
+
+// Modify updateSpritePosition to check for faction collisions during movement
+function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // Store old positions for spatial hash update
     const oldX = sprite.x;
     const oldY = sprite.y;
     const oldTargetX = sprite.target_x;
     const oldTargetY = sprite.target_y;
+    
+    // Check if damage effect has expired
+    if (sprite.takingDamage && sprite.damageUntil && now >= sprite.damageUntil) {
+        sprite.takingDamage = false;
+    }
     
     let progress = 1 - ((sprite.target_time - now) / interval);
     
@@ -277,6 +469,12 @@ function updateSpritePosition(sprite: any, now: number, interval: number) {
             for (const key of MOVEMENT_PRIORITY) {
                 if (keyState[key]) {
                     const newPos = calculateNewPosition(sprite.x, sprite.y, DIRECTIONS[key]);
+                    
+                    // Check for faction collision before moving
+                    if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
+                        // We hit an enemy! Don't move into their space, but continue processing
+                        continue;
+                    }
                     
                     // Check for collision before moving
                     if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
@@ -325,10 +523,18 @@ function updateSpritePosition(sprite: any, now: number, interval: number) {
                     // Apply the same bounds-checking logic as player movement
                     const newPos = calculateNewPosition(sprite.x, sprite.y, randomDirection);
                     
+                    // Check for faction collision before moving
+                    if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
+                        // We hit an enemy! Don't move into their space, but continue processing
+                        attempts++;
+                        continue;
+                    }
+                    
                     // Check for collision before moving
                     if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
                         sprite.target_x = newPos.x;
                         sprite.target_y = newPos.y;
+                        // FIX: Use the same interval for NPCs to ensure smooth animation
                         sprite.target_time = now + interval;
                         foundValidMove = true;
                     }
@@ -336,9 +542,10 @@ function updateSpritePosition(sprite: any, now: number, interval: number) {
                     attempts++;
                 }
                 
-                // After this move, rest for 250ms
+                // After this move, rest for a while based on movement delay
                 if (foundValidMove) {
-                    sprite.restUntil = now + interval + 250;
+                    // FIX: Rest *after* the movement is complete, not immediately
+                    sprite.restUntil = now + interval + sprite.movementDelay;
                     // Update sprite in spatial hash for the new movement
                     spriteMap.update(sprite, sprite.x, sprite.y, oldTargetX, oldTargetY);
                 } else {
@@ -410,7 +617,16 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
         target_time: 250,
         restUntil: 0,  // Track when NPC should start moving again
         isPlayer: isPlayer,
-        faction: faction
+        faction: faction,
+        // Initialize hitpoints based on whether it's a player
+        maxHitpoints: isPlayer ? 5 : 1,
+        hitpoints: isPlayer ? 5 : 1,
+        destX: rand_x,
+        destY: rand_y,
+        logicalX: rand_x,
+        logicalY: rand_y,
+        lastMoveTime: Date.now(),
+        movementDelay: isPlayer ? 0 : 200 + Math.floor(Math.random() * 400)
     };
     
     // Add sprite to spatial hash
@@ -443,9 +659,6 @@ function draw_frame(timestamp: number) {
     if (lastMapSize === null) {
         lastMapSize = window.gameParams.mapSize;
     }
-    if (lastNpcCount === null) {
-        lastNpcCount = window.gameParams.npcCount;
-    }
     
     const frameStartTime = performance.now();
 
@@ -461,11 +674,8 @@ function draw_frame(timestamp: number) {
 
     let now = Date.now();
 
-    // Check if NPC count has changed and update accordingly
-    if (lastNpcCount !== window.gameParams.npcCount) {
-        updateNpcCount();
-        lastNpcCount = window.gameParams.npcCount;
-    }
+    // Check for respawns based on respawn rates
+    checkRespawns(now);
 
     // Check if map size has changed and regenerate map if needed
     if (lastMapSize !== window.gameParams.mapSize) {
@@ -488,7 +698,7 @@ function draw_frame(timestamp: number) {
     
     // Update all other sprites (NPCs)
     for (let i = 1; i < allSprites.length; i++) {
-        let spritePos = updateSpritePosition(allSprites[i], now, window.gameParams.moveSpeed / 2);
+        let spritePos = updateSpritePosition(allSprites[i], now, window.gameParams.moveSpeed);
         spritePositions.push(spritePos);
     }
 
@@ -506,6 +716,9 @@ function draw_frame(timestamp: number) {
         console.error("Error drawing background:", e);
     }
     
+    // Update and display player health
+    displayPlayerHealth();
+    
     // Draw all sprites
     for (let i = 0; i < allSprites.length; i++) {
         const sprite = allSprites[i];
@@ -513,6 +726,53 @@ function draw_frame(timestamp: number) {
         display.drawForeground(sprite.sprite_x, sprite.sprite_y, 
                               spritePos.x, spritePos.y, 
                               camera_pos_x, camera_pos_y);
+        
+        // If this sprite is taking damage, draw the damage effect from bg tileset
+        if (sprite.takingDamage) {
+            // Draw damage sprite (at position 1,3 in bg tileset)
+            display.drawForeground(
+                1,  // sprite_x - damage sprite X position
+                3,  // sprite_y - damage sprite Y position
+                spritePos.x,
+                spritePos.y,
+                camera_pos_x,
+                camera_pos_y,
+                true // Use background tileset
+            );
+        }
+        
+        // If it's the player, optionally draw health indicators
+        if (sprite.isPlayer) {
+            // You could draw health indicators around the player
+            // For example, small hearts or a health bar
+        }
+    }
+    
+    // Process and draw dying sprites
+    const currentTime = Date.now();
+    for (let i = dyingSprites.length - 1; i >= 0; i--) {
+        const dyingSprite = dyingSprites[i];
+        
+        // Draw the sprite
+        display.drawForeground(dyingSprite.sprite_x, dyingSprite.sprite_y, 
+                             dyingSprite.x, dyingSprite.y, 
+                             camera_pos_x, camera_pos_y);
+        
+        // Always draw the damage effect for dying sprites
+        display.drawForeground(
+            1,  // sprite_x - damage sprite X position 
+            3,  // sprite_y - damage sprite Y position
+            dyingSprite.x,
+            dyingSprite.y,
+            camera_pos_x,
+            camera_pos_y,
+            true // Use background tileset
+        );
+        
+        // Remove from dyingSprites array when animation completes
+        if (currentTime >= dyingSprite.damageUntil) {
+            dyingSprites.splice(i, 1);
+        }
     }
     
     // Use the lighting parameter - we'll add light sources for each NPC
@@ -545,74 +805,98 @@ function draw_frame(timestamp: number) {
     requestAnimationFrame(draw_frame);
 }
 
-// Update resetSpritePositions to explicitly pass factions
+// Update resetSpritePositions to use max counts instead of npcCount
 function resetSpritePositions() {
     // Clear existing sprites and spatial hash
     spriteMap.clear();
     allSprites = [];
-
-    // Re-initialize player sprite as human
+    dyingSprites = []; // Clear dying sprites too
+    
+    // Re-initialize player sprite as human with 5 hitpoints
     sprite1 = initializeSpritePosition(true, "human");
     
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
     
-    // Re-initialize NPCs - half undead, half orcs
-    const npcCount = window.gameParams.npcCount || 5;
-    for (let i = 0; i < npcCount; i++) {
-        // Alternate between undead and orc for even distribution
-        const faction = i % 2 === 0 ? "undead" : "orc";
-        const npc = initializeSpritePosition(false, faction);
+    // Initialize orcs
+    const maxOrcCount = window.gameParams.maxOrcCount || 5;
+    for (let i = 0; i < maxOrcCount; i++) {
+        const npc = initializeSpritePosition(false, "orc");
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
     
-    // Update lastNpcCount to match
-    lastNpcCount = allSprites.length - 1; // Subtract 1 for player
-}
-
-// Update the updateNpcCount function to explicitly pass factions
-function updateNpcCount() {
-    console.log(`Updating NPC count to ${window.gameParams.npcCount}`);
-    
-    // Keep the player sprite (first in the array)
-    const playerSprite = allSprites[0];
-    
-    // Remove all NPCs from spatial hash
-    for (let i = 1; i < allSprites.length; i++) {
-        spriteMap.remove(allSprites[i]);
-    }
-    
-    // Reset allSprites to only contain the player
-    allSprites = [playerSprite];
-    
-    // Create new NPCs based on the current count
-    const npcCount = window.gameParams.npcCount || 0;
-    let successfullyCreated = 0;
-    
-    for (let i = 0; i < npcCount; i++) {
-        // Alternate between undead and orc for even distribution
-        const faction = i % 2 === 0 ? "undead" : "orc";
-        const npc = initializeSpritePosition(false, faction);
+    // Initialize undead
+    const maxUndeadCount = window.gameParams.maxUndeadCount || 5;
+    for (let i = 0; i < maxUndeadCount; i++) {
+        const npc = initializeSpritePosition(false, "undead");
         if (npc) {
-            npc.movementDelay = 200 + Math.floor(Math.random() * 400); // Random delay
-            successfullyCreated++;
-        } else {
-            // Stop trying if we can't place more NPCs
-            console.warn(`Could only place ${successfullyCreated} NPCs out of ${npcCount} requested - map is too full`);
-            break;
+            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
     
-    // Update the gameParams to reflect the actual number created
-    window.gameParams.npcCount = successfullyCreated;
-    lastNpcCount = successfullyCreated;
+    // Initialize lastRespawnCheck timestamps
+    lastOrcRespawnCheck = Date.now();
+    lastUndeadRespawnCheck = Date.now();
     
-    console.log(`Created ${successfullyCreated} NPCs. Total sprites: ${allSprites.length}`);
+    console.log(`Reset positions. Player: 1, Orcs: ${maxOrcCount}, Undead: ${maxUndeadCount}`);
 }
 
-// Modify the setup function to explicitly pass factions
+// Replace updateNpcCount with functions to update max counts if needed
+function updateMaxOrcCount(newCount: number) {
+    const currentCounts = countNpcsByFaction();
+    const currentOrcCount = currentCounts.orc;
+    
+    if (newCount > currentOrcCount) {
+        // Add more orcs if the new max is higher
+        for (let i = 0; i < newCount - currentOrcCount; i++) {
+            const npc = initializeSpritePosition(false, "orc");
+            if (npc) {
+                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+            }
+        }
+    } else if (newCount < currentOrcCount) {
+        // Remove orcs if the new max is lower
+        let removed = 0;
+        for (let i = allSprites.length - 1; i >= 0; i--) {
+            if (!allSprites[i].isPlayer && allSprites[i].faction === "orc") {
+                spriteMap.remove(allSprites[i]);
+                allSprites.splice(i, 1);
+                removed++;
+                if (removed >= currentOrcCount - newCount) break;
+            }
+        }
+    }
+}
+
+function updateMaxUndeadCount(newCount: number) {
+    const currentCounts = countNpcsByFaction();
+    const currentUndeadCount = currentCounts.undead;
+    
+    if (newCount > currentUndeadCount) {
+        // Add more undead if the new max is higher
+        for (let i = 0; i < newCount - currentUndeadCount; i++) {
+            const npc = initializeSpritePosition(false, "undead");
+            if (npc) {
+                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+            }
+        }
+    } else if (newCount < currentUndeadCount) {
+        // Remove undead if the new max is lower
+        let removed = 0;
+        for (let i = allSprites.length - 1; i >= 0; i--) {
+            if (!allSprites[i].isPlayer && allSprites[i].faction === "undead") {
+                spriteMap.remove(allSprites[i]);
+                allSprites.splice(i, 1);
+                removed++;
+                if (removed >= currentUndeadCount - newCount) break;
+            }
+        }
+    }
+}
+
+// Update the setup function to use max counts
 async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) {
     // Wait for gameParams to be available if needed
     if (!window.gameParams) {
@@ -689,17 +973,27 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
     
-    // Initialize NPCs - half undead, half orcs
-    const npcCount = window.gameParams.npcCount || 5;
-    for (let i = 0; i < npcCount; i++) {
-        // Alternate between undead and orc for even distribution
-        const faction = i % 2 === 0 ? "undead" : "orc";
-        const npc = initializeSpritePosition(false, faction);
-        npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+    // Initialize orcs
+    const maxOrcCount = window.gameParams.maxOrcCount || 5;
+    for (let i = 0; i < maxOrcCount; i++) {
+        const npc = initializeSpritePosition(false, "orc");
+        if (npc) {
+            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+        }
     }
     
-    // Initialize lastNpcCount to track changes
-    lastNpcCount = npcCount;
+    // Initialize undead
+    const maxUndeadCount = window.gameParams.maxUndeadCount || 5;
+    for (let i = 0; i < maxUndeadCount; i++) {
+        const npc = initializeSpritePosition(false, "undead");
+        if (npc) {
+            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+        }
+    }
+    
+    // Initialize lastRespawnCheck timestamps
+    lastOrcRespawnCheck = Date.now();
+    lastUndeadRespawnCheck = Date.now();
 
     // Set up keyboard event listeners
     window.addEventListener('keydown', handleKeyDown);
@@ -760,14 +1054,16 @@ declare global {
   interface Window {
     gameParams: {
       moveSpeed: number;
-      mapUpdateInterval: number;
       lightingEnabled: boolean;
       performanceStats: string;
       zoom: number;
       mapWidth: number;
       mapHeight: number;
       mapSize: number;
-      npcCount: number;
+      maxOrcCount: number;
+      maxUndeadCount: number;
+      orcRespawnRate: number;
+      undeadRespawnRate: number;
     };
   }
 }

@@ -11,7 +11,10 @@ window.gameParams = {
   mapSize: 10,
   mapWidth: 10,
   mapHeight: 10,
-  npcCount: 10
+  maxOrcCount: 5,
+  maxUndeadCount: 5,
+  orcRespawnRate: 3,
+  undeadRespawnRate: 5
 };
 
 // Now import test.ts after initialization
@@ -71,24 +74,87 @@ function GameParametersApp() {
         </span>
       </div>
       
-      {/* NPC Count */}
+      {/* Max Orc Count */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">NPC Count</label>
+        <label className="w-32 font-medium text-gray-700">Max Orcs</label>
         <input
           type="range"
           min="0"
-          max="100"
+          max="50"
           step="1"
-          value={gameParameters.npcCount}
+          value={gameParameters.maxOrcCount}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.npcCount = value;
-            setGameParameters({...window.gameParams, npcCount: value});
+            window.gameParams.maxOrcCount = value;
+            setGameParameters({...window.gameParams, maxOrcCount: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.npcCount}
+          {gameParameters.maxOrcCount}
+        </span>
+      </div>
+      
+      {/* Max Undead Count */}
+      <div className="mb-4 flex items-center gap-4">
+        <label className="w-32 font-medium text-gray-700">Max Undead</label>
+        <input
+          type="range"
+          min="0"
+          max="50"
+          step="1"
+          value={gameParameters.maxUndeadCount}
+          className="flex-grow"
+          onChange={(e) => {
+            const value = parseInt(e.target.value);
+            window.gameParams.maxUndeadCount = value;
+            setGameParameters({...window.gameParams, maxUndeadCount: value});
+          }}
+        />
+        <span className="w-16 text-right text-gray-600">
+          {gameParameters.maxUndeadCount}
+        </span>
+      </div>
+      
+      {/* Orc Respawn Rate */}
+      <div className="mb-4 flex items-center gap-4">
+        <label className="w-32 font-medium text-gray-700">Orc Respawn</label>
+        <input
+          type="range"
+          min="1"
+          max="20"
+          step="1"
+          value={gameParameters.orcRespawnRate}
+          className="flex-grow"
+          onChange={(e) => {
+            const value = parseInt(e.target.value);
+            window.gameParams.orcRespawnRate = value;
+            setGameParameters({...window.gameParams, orcRespawnRate: value});
+          }}
+        />
+        <span className="w-16 text-right text-gray-600">
+          {gameParameters.orcRespawnRate}s
+        </span>
+      </div>
+      
+      {/* Undead Respawn Rate */}
+      <div className="mb-4 flex items-center gap-4">
+        <label className="w-32 font-medium text-gray-700">Undead Respawn</label>
+        <input
+          type="range"
+          min="1"
+          max="20"
+          step="1"
+          value={gameParameters.undeadRespawnRate}
+          className="flex-grow"
+          onChange={(e) => {
+            const value = parseInt(e.target.value);
+            window.gameParams.undeadRespawnRate = value;
+            setGameParameters({...window.gameParams, undeadRespawnRate: value});
+          }}
+        />
+        <span className="w-16 text-right text-gray-600">
+          {gameParameters.undeadRespawnRate}s
         </span>
       </div>
       
@@ -178,7 +244,10 @@ declare global {
       mapWidth: number;
       mapHeight: number;
       mapSize: number;
-      npcCount: number;
+      maxOrcCount: number;
+      maxUndeadCount: number;
+      orcRespawnRate: number;
+      undeadRespawnRate: number;
     };
   }
 }
