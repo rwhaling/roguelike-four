@@ -860,9 +860,23 @@ function draw_frame(timestamp: number) {
     for (let i = 0; i < allSprites.length; i++) {
         const sprite = allSprites[i];
         const spritePos = spritePositions[i];
-        display.drawForeground(sprite.sprite_x, sprite.sprite_y, 
-                              sprite.visualX, sprite.visualY, 
-                              camera_pos_x, camera_pos_y);
+        
+        // Define a blue aura color for the player
+        const auraColor = sprite.isPlayer ? 
+            // [0.0, 0.3, 1.0, 1.0] : // Blue aura for player [R, G, B, A]
+            [0.0, 0.0, 0.0, 0.0] :  // No aura for other sprites
+            [0.0, 0.0, 0.0, 0.0];  // No aura for other sprites
+        
+        display.drawForeground(
+            sprite.sprite_x, 
+            sprite.sprite_y, 
+            sprite.visualX, 
+            sprite.visualY, 
+            camera_pos_x, 
+            camera_pos_y, 
+            false, // Use foreground tileset
+            auraColor // Pass the aura color
+        );
         
         // If this sprite is taking damage, draw the damage effect from bg tileset
         if (sprite.takingDamage) {
@@ -890,10 +904,17 @@ function draw_frame(timestamp: number) {
     for (let i = dyingSprites.length - 1; i >= 0; i--) {
         const dyingSprite = dyingSprites[i];
         
-        // Draw the sprite
-        display.drawForeground(dyingSprite.sprite_x, dyingSprite.sprite_y, 
-                             dyingSprite.x, dyingSprite.y, 
-                             camera_pos_x, camera_pos_y);
+        // Draw the sprite (no aura for dying sprites)
+        display.drawForeground(
+            dyingSprite.sprite_x, 
+            dyingSprite.sprite_y, 
+            dyingSprite.x, 
+            dyingSprite.y, 
+            camera_pos_x, 
+            camera_pos_y,
+            false, // Use foreground tileset
+            [0.0, 0.0, 0.0, 0.0] // No aura
+        );
         
         // Always draw the damage effect for dying sprites
         display.drawForeground(

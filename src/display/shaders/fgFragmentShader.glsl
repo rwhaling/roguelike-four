@@ -69,7 +69,15 @@ void main() {
   // Early return if you want to test just the adjusted sampling
   // return;
   
-  if (outColor == vec4(0.0,0.0,0.0,0.0)) {
+  // Define the off-black color from the sprite sheet (#0F0425)
+  vec4 offBlack = vec4(0.059, 0.016, 0.145, 1.0);
+  
+  // Check if the pixel is transparent or has the off-black background color
+  // Using a small threshold to handle color variations
+  bool isTransparent = (outColor.a < 0.1) || 
+                      (length(outColor.rgb - offBlack.rgb) < 0.1);
+  
+  if (isTransparent) {
     if (mod(v_texcoord.y * sheet_height_px, u_sprite_size) > u_sprite_size - 1.0) {
       return;         
     } else if (mod(v_texcoord.y * sheet_height_px, u_sprite_size) < 1.0) {
@@ -80,12 +88,6 @@ void main() {
       return;
     }
 
-    // vec4 blurDown1 = texture(u_texture, v_texcoord + vec2(0.0, 0.00283));
-    // vec4 blurDown2 = texture(u_texture, v_texcoord + vec2(0.0, 0.00567));
-
-    // vec4 blurDown1 = texture(u_texture, v_texcoord + vec2(0.0, 0.00130));
-    // vec4 blurDown2 = texture(u_texture, v_texcoord + vec2(0.0, 0.00260));
-
     vec4 blurredColor = vec4(0.0,0.0,0.0,0.0);
 
     // Calculate blur offsets
@@ -94,26 +96,32 @@ void main() {
     
     vec4 blurDown1 = texture(u_texture, v_texcoord + vec2(0.0, y_offset));
     if (mod(v_texcoord.y * sheet_height_px + 1.0, u_sprite_size) <= u_sprite_size - 1.0) {
-        blurredColor += blurDown1;
+        // Only add to blur if the sampled pixel is NOT transparent or offBlack
+        if (!(blurDown1.a < 0.1 || length(blurDown1.rgb - offBlack.rgb) < 0.1)) {
+            blurredColor += blurDown1;
+        }
     }
     vec4 blurUp1 = texture(u_texture, v_texcoord + vec2(0.0, -y_offset));
     if (mod(v_texcoord.y * sheet_height_px - 1.0, u_sprite_size) >= 1.0) {
-        blurredColor += blurUp1;
+        if (!(blurUp1.a < 0.1 || length(blurUp1.rgb - offBlack.rgb) < 0.1)) {
+            blurredColor += blurUp1;
+        }
     }
     vec4 blurLeft1 = texture(u_texture, v_texcoord + vec2(x_offset, 0.0));
     if (mod(v_texcoord.x * sheet_width_px + 1.0, u_sprite_size) <= u_sprite_size - 1.0) {
-        blurredColor += blurLeft1;
+        if (!(blurLeft1.a < 0.1 || length(blurLeft1.rgb - offBlack.rgb) < 0.1)) {
+            blurredColor += blurLeft1;
+        }
     }
     vec4 blurRight1 = texture(u_texture, v_texcoord + vec2(-x_offset, 0.0));
     if (mod(v_texcoord.x * sheet_width_px - 1.0, u_sprite_size) >= 1.0) {
-        blurredColor += blurRight1;
+        if (!(blurRight1.a < 0.1 || length(blurRight1.rgb - offBlack.rgb) < 0.1)) {
+            blurredColor += blurRight1;
+        }
     }
 
-    // vec4 aura_color = vec4(1.0,0.0,0.0,1.0);
     vec4 auraHighlightColor = u_aura_color * vec4(0.5,0.5,0.5,1.0);
 
-    // vec4 blurredColor = blurDown1 + blurUp1 + blurLeft1 + blurRight1;
-    // outColor = blurredColor;
     if (blurredColor != vec4(0.0,0.0,0.0,0.0)) {
       vec4 noiseColor = mix(
         u_aura_color,
@@ -124,12 +132,7 @@ void main() {
           t_raw * 5.0
         )))
       );
-    //   vec4 noiseColor = vec4(1.0 - t,1.0-t,1.0 - t,1) * (0.4 * blurDown1 + 0.6 * blurDown2) * abs(noise(vec3(floor(v_texcoord.x * 512.0),floor(v_texcoord.y * 768.0),t_raw)));
       outColor = noiseColor;
-    //   if (length(noiseColor) >= 0.6) {
-    //     outColor = noiseColor;
-    //   }
-
     } 
   } 
 }

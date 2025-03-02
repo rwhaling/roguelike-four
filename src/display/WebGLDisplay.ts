@@ -439,7 +439,16 @@ export class WebGLDisplay {
         gl.drawArrays(primitiveType, offset, count);
     }
 
-    public drawForeground(sprite_x: number, sprite_y: number, grid_x: number, grid_y: number, camera_x: number, camera_y: number, useBgTileset: boolean = false) {
+    public drawForeground(
+        sprite_x: number, 
+        sprite_y: number, 
+        grid_x: number, 
+        grid_y: number, 
+        camera_x: number, 
+        camera_y: number, 
+        useBgTileset: boolean = false,
+        auraColor: [number, number, number, number] = [0.0, 0.0, 0.0, 0.0] // New parameter for aura color
+    ) {
         const gl = this.gl;
         const program = this.fgProgram;
 
@@ -540,7 +549,8 @@ export class WebGLDisplay {
         gl.uniform1f(t_raw_location, t_raw);
 
         gl.uniform4f(spriteTranspUniformLocation, 1.0, 1.0, 1.0, 1.0);
-        gl.uniform4f(auraColorUniformLocation, 0.0, 0.0, 0.0, 0.0);
+        gl.uniform4f(auraColorUniformLocation, 
+            auraColor[0], auraColor[1], auraColor[2], auraColor[3]);
 
         // draw
         var primitiveType = gl.TRIANGLE_STRIP;
