@@ -6,6 +6,10 @@ import * as glu from "./display/GLUtils";
 // You may need to add a declaration to make TypeScript happy
 declare const noise: any;
 
+// Add variables to track last respawn check times
+let lastOrcRespawnCheck = Date.now();
+let lastUndeadRespawnCheck = Date.now();
+
 function init() {
     console.log(noise);
     console.log("about to retrieve encrypted images")
@@ -186,11 +190,13 @@ interface Sprite {
     // Hitpoint properties
     maxHitpoints: number;
     hitpoints: number;
-    lastDamageTime?: number;
     
     // Movement timing
     lastMoveTime: number;
     movementDelay: number;
+    
+    // NEW: Attack cooldown
+    lastAttackTime?: number;
     
     // NEW: Structure flag for immobile objects like fortresses
     isStructure?: boolean;
@@ -430,8 +436,18 @@ function checkFactionCollision(sprite: Sprite, targetX: number, targetY: number)
     // If there are sprites and they're of a different faction, it's a collision
     for (const targetSprite of spritesAtTarget) {
         if (targetSprite !== sprite && targetSprite.faction !== sprite.faction) {
-            // Apply damage to the target sprite
-            applyDamage(sprite, targetSprite);
+            // Check if attacker's attack cooldown has elapsed
+            const now = Date.now();
+            const attackCooldown = sprite.isPlayer ? 
+                window.gameParams.playerAttackCooldown : 
+                window.gameParams.npcAttackCooldown;
+                
+            if (!sprite.lastAttackTime || now - sprite.lastAttackTime >= attackCooldown) {
+                // Apply damage to the target sprite
+                applyDamage(sprite, targetSprite);
+                // Set attacker's last attack time
+                sprite.lastAttackTime = now;
+            }
             return true;
         }
     }
@@ -443,22 +459,18 @@ function checkFactionCollision(sprite: Sprite, targetX: number, targetY: number)
 function applyDamage(attacker: Sprite, target: Sprite) {
     const now = Date.now();
     
-    // Check if enough time has passed since the last damage (cooldown of 1 second)
-    if (!target.lastDamageTime || now - target.lastDamageTime >= 1000) {
-        // Apply damage effect
-        target.takingDamage = true;
-        target.damageUntil = now + 150; // Show damage effect for 500ms
-        target.lastDamageTime = now;
-        
-        // Reduce hitpoints
-        target.hitpoints -= 1;
-        
-        console.log(`${target.faction} sprite took damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
-        
-        // Check if the sprite is defeated
-        if (target.hitpoints <= 0) {
-            handleSpriteDefeat(target);
-        }
+    // Apply damage effect immediately (no cooldown on receiving damage)
+    target.takingDamage = true;
+    target.damageUntil = now + 150; // Show damage effect for 150ms
+    
+    // Reduce hitpoints
+    target.hitpoints -= 1;
+    
+    console.log(`${target.faction} sprite took damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
+    
+    // Check if the sprite is defeated
+    if (target.hitpoints <= 0) {
+        handleSpriteDefeat(target);
     }
 }
 
@@ -515,59 +527,137 @@ function countNpcsByFaction() {
     return counts;
 }
 
-// New function to handle respawning
-let lastOrcRespawnCheck = 0;
-let lastUndeadRespawnCheck = 0;
+// New function to respawn NPC adjacent to its faction's fortress
+function respawnNpcAdjacentToFortress(faction: string): Sprite | null {
+    // Find the fortress for this faction
+    const fortress = fortresses.find(f => f.faction === faction);
+    if (!fortress) {
+        console.warn(`No fortress found for faction: ${faction}`);
+        return null;
+    }
+    
+    // Define all 8 possible adjacent positions (including diagonals)
+    const adjacentPositions = [
+        { x: fortress.x - 1, y: fortress.y - 1 }, // top-left
+        { x: fortress.x,     y: fortress.y - 1 }, // top
+        { x: fortress.x + 1, y: fortress.y - 1 }, // top-right
+        { x: fortress.x - 1, y: fortress.y },     // left
+        { x: fortress.x + 1, y: fortress.y },     // right
+        { x: fortress.x - 1, y: fortress.y + 1 }, // bottom-left
+        { x: fortress.x,     y: fortress.y + 1 }, // bottom
+        { x: fortress.x + 1, y: fortress.y + 1 }  // bottom-right
+    ];
+    
+    // Shuffle the positions array for randomness
+    for (let i = adjacentPositions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [adjacentPositions[i], adjacentPositions[j]] = [adjacentPositions[j], adjacentPositions[i]];
+    }
+    
+    // Try each adjacent position until finding a valid one
+    for (const pos of adjacentPositions) {
+        // Check if position is within map bounds and not occupied
+        if (pos.x > 0 && pos.x < window.gameParams.mapWidth - 1 &&
+            pos.y > 0 && pos.y < window.gameParams.mapHeight - 1 &&
+            !isPositionOccupied(pos.x, pos.y, null)) {
+            
+            // Select appropriate sprite array based on faction
+            let spriteOptions = faction === "orc" ? orc_sprites : undead_sprites;
+            let selectedSprite = spriteOptions[Math.floor(Math.random() * spriteOptions.length)];
+            
+            // Create the sprite with the given position
+            const sprite: Sprite = {
+                x: pos.x,
+                y: pos.y,
+                visualX: pos.x,
+                visualY: pos.y,
+                sprite_x: selectedSprite[0],
+                sprite_y: selectedSprite[1],
+                target_x: pos.x,
+                target_y: pos.y,
+                target_time: 250,
+                restUntil: 0,
+                isPlayer: false,
+                faction: faction,
+                enemyFactions: faction === "orc" ? ["undead"] : ["orc"],
+                maxHitpoints: 1,
+                hitpoints: 1,
+                lastMoveTime: Date.now(),
+                movementDelay: 200 + Math.floor(Math.random() * 400),
+                isStructure: false,
+                useBackgroundSpritesheet: false
+            };
+            
+            // Add sprite to spatial hash and sprites array
+            spriteMap.add(sprite);
+            allSprites.push(sprite);
+            
+            return sprite;
+        }
+    }
+    
+    console.warn(`Could not find valid position adjacent to ${faction} fortress`);
+    return null;
+}
 
+// Modify the checkRespawns function to check fortress status before spawning
 function checkRespawns(now: number) {
     const factionCounts = countNpcsByFaction();
     
-    // Check orc respawns - no longer multiply by 1000 since values are already in milliseconds
+    // Check orc respawns - only if their fortress exists and is alive
     if (now - lastOrcRespawnCheck >= window.gameParams.orcRespawnRate) {
         lastOrcRespawnCheck = now;
         
-        if (factionCounts.orc < window.gameParams.maxOrcCount) {
-            // Spawn exactly one orc
-            const npc = initializeSpritePosition(false, "orc");
+        // Find the orc fortress
+        const orcFortress = fortresses.find(f => f.faction === "orc");
+        
+        // Only respawn if fortress exists and has health
+        if (orcFortress && orcFortress.hitpoints > 0 && factionCounts.orc < window.gameParams.maxOrcCount) {
+            // Spawn exactly one orc adjacent to orc fortress
+            const npc = respawnNpcAdjacentToFortress("orc");
             if (npc) {
-                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
-                console.log(`Respawned an orc. Current count: ${factionCounts.orc + 1}`);
+                console.log(`Respawned an orc adjacent to fortress. Current count: ${factionCounts.orc + 1}`);
             }
         }
     }
     
-    // Check undead respawns - no longer multiply by 1000
+    // Check undead respawns - only if their fortress exists and is alive
     if (now - lastUndeadRespawnCheck >= window.gameParams.undeadRespawnRate) {
         lastUndeadRespawnCheck = now;
         
-        if (factionCounts.undead < window.gameParams.maxUndeadCount) {
-            // Spawn exactly one undead
-            const npc = initializeSpritePosition(false, "undead");
+        // Find the undead fortress
+        const undeadFortress = fortresses.find(f => f.faction === "undead");
+        
+        // Only respawn if fortress exists and has health
+        if (undeadFortress && undeadFortress.hitpoints > 0 && factionCounts.undead < window.gameParams.maxUndeadCount) {
+            // Spawn exactly one undead adjacent to undead fortress
+            const npc = respawnNpcAdjacentToFortress("undead");
             if (npc) {
-                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
-                console.log(`Respawned an undead. Current count: ${factionCounts.undead + 1}`);
+                console.log(`Respawned an undead adjacent to fortress. Current count: ${factionCounts.undead + 1}`);
             }
         }
     }
 }
 
-// Add a function to display player health in the UI
+// Update the displayPlayerHealth function to return stats instead of modifying window.gameParams directly
 function displayPlayerHealth() {
+    let statsText = "";
+    
     if (sprite1) {
-        const healthPercent = (sprite1.hitpoints / sprite1.maxHitpoints) * 100;
-        
-        // Update the performance stats to include health
-        window.gameParams.performanceStats += ` | Health: ${sprite1.hitpoints}/${sprite1.maxHitpoints}`;
+        // Add player health info
+        statsText += `Health: ${sprite1.hitpoints}/${sprite1.maxHitpoints}`;
         
         // Add faction counts to stats
         const counts = countNpcsByFaction();
-        window.gameParams.performanceStats += ` | Orcs: ${counts.orc}/${window.gameParams.maxOrcCount} | Undead: ${counts.undead}/${window.gameParams.maxUndeadCount}`;
+        statsText += ` | Orcs: ${counts.orc}/${window.gameParams.maxOrcCount} | Undead: ${counts.undead}/${window.gameParams.maxUndeadCount}`;
         
         // Add fortress positions and health
         fortresses.forEach(fortress => {
-            window.gameParams.performanceStats += ` | ${fortress.faction} fortress: (${fortress.x},${fortress.y}) HP: ${fortress.hitpoints}/${fortress.maxHitpoints}`;
+            statsText += ` | ${fortress.faction} fortress: (${fortress.x},${fortress.y}) HP: ${fortress.hitpoints}/${fortress.maxHitpoints}`;
         });
     }
+    
+    return statsText;
 }
 
 // NEW: Function to find the nearest enemy sprite
@@ -606,7 +696,7 @@ function getDirectionTowardTarget(fromX: number, fromY: number, toX: number, toY
     return { dx, dy };
 }
 
-// Modify updateSpritePosition to skip movement for structures
+// Modify updateSpritePosition to include fallback movement for NPCs
 function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // Store old positions for spatial hash update
     const oldX = sprite.x;
@@ -722,6 +812,40 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                         sprite.target_x = newPos.x;
                         sprite.target_y = newPos.y;
                         hasMoved = true;
+                    }
+                    
+                    // NEW FALLBACK: If still couldn't move, check all 8 adjacent positions
+                    if (!hasMoved) {
+                        // All possible directions (8 directions including diagonals)
+                        const allDirections = [
+                            { dx: -1, dy: -1 }, // top-left
+                            { dx:  0, dy: -1 }, // top
+                            { dx:  1, dy: -1 }, // top-right
+                            { dx: -1, dy:  0 }, // left
+                            { dx:  1, dy:  0 }, // right
+                            { dx: -1, dy:  1 }, // bottom-left
+                            { dx:  0, dy:  1 }, // bottom
+                            { dx:  1, dy:  1 }  // bottom-right
+                        ];
+                        
+                        // Shuffle directions for randomness
+                        for (let i = allDirections.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [allDirections[i], allDirections[j]] = [allDirections[j], allDirections[i]];
+                        }
+                        
+                        // Try each direction
+                        for (const dir of allDirections) {
+                            const pos = calculateNewPosition(sprite.x, sprite.y, dir);
+                            if (!isPositionOccupied(pos.x, pos.y, sprite) && 
+                                !checkFactionCollision(sprite, pos.x, pos.y)) {
+                                // Found a valid move - take it
+                                sprite.target_x = pos.x;
+                                sprite.target_y = pos.y;
+                                hasMoved = true;
+                                break;
+                            }
+                        }
                     }
                 } else {
                     // No visible enemies, move randomly as before
@@ -971,7 +1095,10 @@ function draw_frame(timestamp: number) {
     }
     
     // Update and display player health
-    displayPlayerHealth();
+    const healthAndFactionStats = displayPlayerHealth();
+    if (healthAndFactionStats) {
+        console.log(healthAndFactionStats);
+    }
     
     // Draw all sprites
     for (let i = 0; i < allSprites.length; i++) {
@@ -1073,8 +1200,17 @@ function draw_frame(timestamp: number) {
     const frameDuration = frameEndTime - frameStartTime;
     const fps = 1000 / (frameEndTime - lastFrameTime);
 
-    // Update the performance stats in the shared parameters
-    window.gameParams.performanceStats = `Render time: ${frameDuration.toFixed(2)}ms | FPS: ${fps.toFixed(2)}`;
+    // First set the base performance metrics
+    let performanceStats = `Render time: ${frameDuration.toFixed(2)}ms | FPS: ${fps.toFixed(2)}`;
+    
+    // Then add player health and faction information using a differently named variable
+    const statsInfo = displayPlayerHealth();
+    if (statsInfo && statsInfo.length > 0) {
+        performanceStats += ` | ${statsInfo}`;
+    }
+    
+    // Finally update the window.gameParams
+    window.gameParams.performanceStats = performanceStats;
 
     lastFrameTime = frameEndTime;
     requestAnimationFrame(draw_frame);
@@ -1293,6 +1429,14 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     lastFrameTime = performance.now();
     lastMapUpdateTime = Date.now();
 
+    // Ensure attack cooldown parameters exist with defaults if not set
+    if (window.gameParams.playerAttackCooldown === undefined) {
+        window.gameParams.playerAttackCooldown = 400; // 800ms default for player attacks
+    }
+    if (window.gameParams.npcAttackCooldown === undefined) {
+        window.gameParams.npcAttackCooldown = 400; // 1200ms default for NPC attacks
+    }
+
     console.log("Starting animation loop");
     requestAnimationFrame(draw_frame);
 }
@@ -1355,6 +1499,8 @@ declare global {
       maxUndeadCount: number;
       orcRespawnRate: number;
       undeadRespawnRate: number;
+      playerAttackCooldown: number; // New: player attack cooldown in ms
+      npcAttackCooldown: number;    // New: NPC attack cooldown in ms
     };
   }
 }
