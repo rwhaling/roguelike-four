@@ -420,8 +420,8 @@ let lastUndeadRespawnCheck = 0;
 function checkRespawns(now: number) {
     const factionCounts = countNpcsByFaction();
     
-    // Check orc respawns
-    if (now - lastOrcRespawnCheck >= window.gameParams.orcRespawnRate * 1000) {
+    // Check orc respawns - no longer multiply by 1000 since values are already in milliseconds
+    if (now - lastOrcRespawnCheck >= window.gameParams.orcRespawnRate) {
         lastOrcRespawnCheck = now;
         
         if (factionCounts.orc < window.gameParams.maxOrcCount) {
@@ -434,8 +434,8 @@ function checkRespawns(now: number) {
         }
     }
     
-    // Check undead respawns
-    if (now - lastUndeadRespawnCheck >= window.gameParams.undeadRespawnRate * 1000) {
+    // Check undead respawns - no longer multiply by 1000
+    if (now - lastUndeadRespawnCheck >= window.gameParams.undeadRespawnRate) {
         lastUndeadRespawnCheck = now;
         
         if (factionCounts.undead < window.gameParams.maxUndeadCount) {
@@ -674,13 +674,45 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
     let rand_x, rand_y;
     let isValidPosition = false;
     let attempts = 0;
-    const MAX_ATTEMPTS = 10;
+    const MAX_ATTEMPTS = 20;
     
-    while (!isValidPosition && attempts < MAX_ATTEMPTS) {
-        rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 2)) + 1;
-        rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 2)) + 1;
-        isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
-        attempts++;
+    // If it's the player, keep the original random placement
+    if (isPlayer) {
+        while (!isValidPosition && attempts < MAX_ATTEMPTS) {
+            rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 2)) + 1;
+            rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 2)) + 1;
+            isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
+            attempts++;
+        }
+    } 
+    // For NPCs (enemies), place them along the edges but not on walls
+    else {
+        while (!isValidPosition && attempts < MAX_ATTEMPTS) {
+            // Decide which edge to spawn on (0=top, 1=right, 2=bottom, 3=left)
+            const edge = Math.floor(Math.random() * 4);
+            
+            switch (edge) {
+                case 0: // Top edge
+                    rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
+                    rand_y = 1;
+                    break;
+                case 1: // Right edge
+                    rand_x = window.gameParams.mapWidth - 2;
+                    rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
+                    break;
+                case 2: // Bottom edge
+                    rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
+                    rand_y = window.gameParams.mapHeight - 2;
+                    break;
+                case 3: // Left edge
+                    rand_x = 1;
+                    rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
+                    break;
+            }
+            
+            isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
+            attempts++;
+        }
     }
     
     if (!isValidPosition) {

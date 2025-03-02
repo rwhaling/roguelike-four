@@ -13,8 +13,8 @@ window.gameParams = {
   mapHeight: 10,
   maxOrcCount: 5,
   maxUndeadCount: 5,
-  orcRespawnRate: 3,
-  undeadRespawnRate: 5
+  orcRespawnRate: 500,
+  undeadRespawnRate: 500
 };
 
 // Now import test.ts after initialization
@@ -121,9 +121,9 @@ function GameParametersApp() {
         <label className="w-32 font-medium text-gray-700">Orc Respawn</label>
         <input
           type="range"
-          min="1"
-          max="20"
-          step="1"
+          min="100"
+          max="10000"
+          step="100"
           value={gameParameters.orcRespawnRate}
           className="flex-grow"
           onChange={(e) => {
@@ -133,7 +133,7 @@ function GameParametersApp() {
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.orcRespawnRate}s
+          {gameParameters.orcRespawnRate}ms
         </span>
       </div>
       
@@ -142,9 +142,9 @@ function GameParametersApp() {
         <label className="w-32 font-medium text-gray-700">Undead Respawn</label>
         <input
           type="range"
-          min="1"
-          max="20"
-          step="1"
+          min="100"
+          max="10000"
+          step="100"
           value={gameParameters.undeadRespawnRate}
           className="flex-grow"
           onChange={(e) => {
@@ -154,7 +154,7 @@ function GameParametersApp() {
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.undeadRespawnRate}s
+          {gameParameters.undeadRespawnRate}ms
         </span>
       </div>
       
