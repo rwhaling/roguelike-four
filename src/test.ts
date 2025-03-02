@@ -21,7 +21,7 @@ function loadSpriteSheets() {
     let fgReqUrl = "fg_characters.png"; // New foreground sprite sheet
     
     // Second sprite sheet (background tiles)
-    let bgReqUrl = "bg_tiles.png"; // New background sprite sheet
+    let bgReqUrl = "bg_edits_1.png"; // New background sprite sheet
     
     // Load foreground tileset first
     if (fgReqUrl.endsWith(".png")) {
@@ -153,7 +153,7 @@ function calculateNewPosition(x, y, direction) {
     };
 }
 
-// Expand Sprite interface to include hitpoints
+// Expand Sprite interface to include structure property
 interface Sprite {
     // Logical grid position
     x: number;
@@ -191,6 +191,108 @@ interface Sprite {
     // Movement timing
     lastMoveTime: number;
     movementDelay: number;
+    
+    // NEW: Structure flag for immobile objects like fortresses
+    isStructure?: boolean;
+    
+    // NEW: Flag to use background spritesheet for rendering
+    useBackgroundSpritesheet?: boolean;
+}
+
+// Track fortresses for easy reference
+let fortresses: Sprite[] = [];
+
+// Function to spawn fortresses
+function spawnFortresses() {
+    console.log("Starting fortress spawning...");
+    
+    // Clear existing fortresses
+    fortresses = [];
+    
+    // Map quadrant boundaries
+    const halfWidth = Math.floor(window.gameParams.mapWidth / 2);
+    const halfHeight = Math.floor(window.gameParams.mapHeight / 2);
+    
+    // Ensure we don't place on border walls (add padding of 2)
+    const minX = 2;
+    const minY = 2;
+    const maxOrcX = halfWidth - 2;
+    const maxOrcY = halfHeight - 2;
+    const minUndeadX = halfWidth + 2;
+    const minUndeadY = halfHeight + 2;
+    const maxX = window.gameParams.mapWidth - 3;
+    const maxY = window.gameParams.mapHeight - 3;
+    
+    console.log(`Orc fortress range: (${minX},${minY}) to (${maxOrcX},${maxOrcY})`);
+    console.log(`Undead fortress range: (${minUndeadX},${minUndeadY}) to (${maxX},${maxY})`);
+    
+    // Random position for orc fortress (upper-left quadrant)
+    const orcFortressX = minX + Math.floor(Math.random() * (maxOrcX - minX));
+    const orcFortressY = minY + Math.floor(Math.random() * (maxOrcY - minY));
+    
+    // Random position for undead fortress (lower-right quadrant)
+    const undeadFortressX = minUndeadX + Math.floor(Math.random() * (maxX - minUndeadX));
+    const undeadFortressY = minUndeadY + Math.floor(Math.random() * (maxY - minUndeadY));
+    
+    // Create orc fortress
+    const orcFortress: Sprite = {
+        x: orcFortressX,
+        y: orcFortressY,
+        visualX: orcFortressX,
+        visualY: orcFortressY,
+        sprite_x: 10,
+        sprite_y: 21,
+        target_x: orcFortressX,
+        target_y: orcFortressY,
+        target_time: 0,
+        restUntil: 0,
+        isPlayer: false,
+        isStructure: true, // Mark as structure (immobile)
+        faction: "orc",
+        enemyFactions: ["undead", "human"], // Enemies of the orc faction
+        maxHitpoints: 20, // Fortresses have more hitpoints
+        hitpoints: 20,
+        lastMoveTime: 0,
+        movementDelay: 0,
+        useBackgroundSpritesheet: true // Use background spritesheet
+    };
+    
+    // Create undead fortress
+    const undeadFortress: Sprite = {
+        x: undeadFortressX,
+        y: undeadFortressY,
+        visualX: undeadFortressX,
+        visualY: undeadFortressY,
+        sprite_x: 10,
+        sprite_y: 22,
+        target_x: undeadFortressX,
+        target_y: undeadFortressY,
+        target_time: 0,
+        restUntil: 0,
+        isPlayer: false,
+        isStructure: true, // Mark as structure (immobile)
+        faction: "undead",
+        enemyFactions: ["orc", "human"], // Enemies of the undead faction
+        maxHitpoints: 20, // Fortresses have more hitpoints
+        hitpoints: 20,
+        lastMoveTime: 0,
+        movementDelay: 0,
+        useBackgroundSpritesheet: true // Use background spritesheet
+    };
+    
+    // Add to fortresses array for reference
+    fortresses.push(orcFortress, undeadFortress);
+    
+    // Add to spatial hash to block movement
+    spriteMap.add(orcFortress);
+    spriteMap.add(undeadFortress);
+    
+    // Add to allSprites for updating and rendering
+    allSprites.push(orcFortress, undeadFortress);
+    
+    console.log(`Spawned orc fortress at (${orcFortressX}, ${orcFortressY})`);
+    console.log(`Spawned undead fortress at (${undeadFortressX}, ${undeadFortressY})`);
+    console.log(`Total sprites after fortress spawning: ${allSprites.length}`);
 }
 
 // Spatial hash implementation
@@ -460,6 +562,11 @@ function displayPlayerHealth() {
         // Add faction counts to stats
         const counts = countNpcsByFaction();
         window.gameParams.performanceStats += ` | Orcs: ${counts.orc}/${window.gameParams.maxOrcCount} | Undead: ${counts.undead}/${window.gameParams.maxUndeadCount}`;
+        
+        // Add fortress positions and health
+        fortresses.forEach(fortress => {
+            window.gameParams.performanceStats += ` | ${fortress.faction} fortress: (${fortress.x},${fortress.y}) HP: ${fortress.hitpoints}/${fortress.maxHitpoints}`;
+        });
     }
 }
 
@@ -499,7 +606,7 @@ function getDirectionTowardTarget(fromX: number, fromY: number, toX: number, toY
     return { dx, dy };
 }
 
-// Modify updateSpritePosition to implement enemy targeting behavior
+// Modify updateSpritePosition to skip movement for structures
 function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // Store old positions for spatial hash update
     const oldX = sprite.x;
@@ -510,6 +617,14 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // Check if damage effect has expired
     if (sprite.takingDamage && sprite.damageUntil && now >= sprite.damageUntil) {
         sprite.takingDamage = false;
+    }
+    
+    // For structures, skip movement logic and just return current position
+    if (sprite.isStructure) {
+        return {
+            x: sprite.x,
+            y: sprite.y
+        };
     }
     
     let progress = 1 - ((sprite.target_time - now) / interval);
@@ -763,7 +878,9 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
         maxHitpoints: isPlayer ? 5 : 1,
         hitpoints: isPlayer ? 5 : 1,
         lastMoveTime: Date.now(),
-        movementDelay: isPlayer ? 0 : 200 + Math.floor(Math.random() * 400)
+        movementDelay: isPlayer ? 0 : 200 + Math.floor(Math.random() * 400),
+        isStructure: false,
+        useBackgroundSpritesheet: false
     };
     
     // Add sprite to spatial hash
@@ -863,10 +980,10 @@ function draw_frame(timestamp: number) {
         
         // Define a blue aura color for the player
         const auraColor = sprite.isPlayer ? 
-            // [0.0, 0.3, 1.0, 1.0] : // Blue aura for player [R, G, B, A]
-            [0.0, 0.0, 0.0, 0.0] :  // No aura for other sprites
+            [0.0, 0.0, 0.0, 0.0] :  // No aura for player
             [0.0, 0.0, 0.0, 0.0];  // No aura for other sprites
         
+        // Draw the sprite using the appropriate spritesheet
         display.drawForeground(
             sprite.sprite_x, 
             sprite.sprite_y, 
@@ -874,7 +991,7 @@ function draw_frame(timestamp: number) {
             sprite.visualY, 
             camera_pos_x, 
             camera_pos_y, 
-            false, // Use foreground tileset
+            sprite.useBackgroundSpritesheet === true, // Use bg spritesheet if specified
             auraColor // Pass the aura color
         );
         
@@ -963,11 +1080,14 @@ function draw_frame(timestamp: number) {
     requestAnimationFrame(draw_frame);
 }
 
-// Update resetSpritePositions to use max counts instead of npcCount
+// Modify resetSpritePositions to handle fortresses properly
 function resetSpritePositions() {
+    console.log("Resetting sprite positions...");
+    
     // Clear existing sprites and spatial hash
     spriteMap.clear();
     allSprites = [];
+    fortresses = []; // Clear fortresses array
     dyingSprites = []; // Clear dying sprites too
     
     // Re-initialize player sprite as human with 5 hitpoints
@@ -994,11 +1114,20 @@ function resetSpritePositions() {
         }
     }
     
+    console.log("About to spawn fortresses in resetSpritePositions...");
+    // Explicitly spawn fortresses
+    spawnFortresses();
+    
     // Initialize lastRespawnCheck timestamps
     lastOrcRespawnCheck = Date.now();
     lastUndeadRespawnCheck = Date.now();
     
-    console.log(`Reset positions. Player: 1, Orcs: ${maxOrcCount}, Undead: ${maxUndeadCount}`);
+    console.log(`Reset positions. Player: 1, Orcs: ${maxOrcCount}, Undead: ${maxUndeadCount}, Fortresses: ${fortresses.length}`);
+}
+
+// Function to get fortress at position (if any)
+function getFortressAt(x: number, y: number): Sprite | null {
+    return fortresses.find(fortress => fortress.x === x && fortress.y === y) || null;
 }
 
 // Replace updateNpcCount with functions to update max counts if needed
@@ -1148,6 +1277,10 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
+    
+    console.log("About to spawn fortresses...");
+    // Explicitly spawn fortresses here
+    spawnFortresses();
     
     // Initialize lastRespawnCheck timestamps
     lastOrcRespawnCheck = Date.now();

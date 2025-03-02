@@ -7,14 +7,14 @@ window.gameParams = {
   moveSpeed: 50,
   lightingEnabled: false,
   performanceStats: "Initializing...",
-  zoom: 12.0,
-  mapSize: 10,
-  mapWidth: 10,
-  mapHeight: 10,
-  maxOrcCount: 5,
-  maxUndeadCount: 5,
-  orcRespawnRate: 500,
-  undeadRespawnRate: 500
+  zoom: 20.0,
+  mapSize: 16,
+  mapWidth: 16,
+  mapHeight: 16,
+  maxOrcCount: 20,
+  maxUndeadCount: 20,
+  orcRespawnRate: 200,
+  undeadRespawnRate: 200
 };
 
 // Now import test.ts after initialization
@@ -201,7 +201,7 @@ function GameParametersApp() {
         <input
           type="range"
           min="4.0"
-          max="16.0"
+          max="32.0"
           step="0.5"
           value={gameParameters.zoom}
           className="flex-grow"
