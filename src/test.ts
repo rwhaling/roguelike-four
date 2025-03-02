@@ -359,7 +359,7 @@ let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
 let orc_sprites = [[4,9],[6,9],[3,10],[5,10],[7,10],[4,11],[6,11]]
 let human_sprites = [[9,15],[11,15],[13,15],[8,16],[10,16],[12,16],[9,17],[11,17]]
 
-function initializeSpritePosition() {
+function initializeSpritePosition(isPlayer = false, faction = "human") {
     let rand_x, rand_y;
     let isValidPosition = false;
     let attempts = 0;
@@ -382,23 +382,23 @@ function initializeSpritePosition() {
         return null;
     }
     
-    // Pick one of the three sprite types randomly
-    const spriteTypeRoll = Math.floor(Math.random() * 3);
-    // const spriteTypeRoll = 2;
     let selectedSprite;
     
-    if (spriteTypeRoll === 0) {
-        // Pick undead sprite
+    // Choose sprite based on faction
+    if (faction === "human") {
+        selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
+    } else if (faction === "undead") {
         selectedSprite = undead_sprites[Math.floor(Math.random() * undead_sprites.length)];
-    } else if (spriteTypeRoll === 1) {
-        // Pick orc sprite
+    } else if (faction === "orc") {
         selectedSprite = orc_sprites[Math.floor(Math.random() * orc_sprites.length)];
     } else {
-        // Pick human sprite
+        // Default to human if unknown faction
+        console.warn(`Unknown faction: ${faction}, defaulting to human`);
         selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
+        faction = "human";
     }
 
-    console.log("Selected sprite:", selectedSprite);
+    console.log(`Created ${faction} sprite:`, selectedSprite);
     
     const sprite = {
         x: rand_x,
@@ -409,7 +409,8 @@ function initializeSpritePosition() {
         target_y: rand_y,
         target_time: 250,
         restUntil: 0,  // Track when NPC should start moving again
-        isPlayer: false // Add this flag to distinguish player-controlled sprites
+        isPlayer: isPlayer,
+        faction: faction
     };
     
     // Add sprite to spatial hash
@@ -544,7 +545,34 @@ function draw_frame(timestamp: number) {
     requestAnimationFrame(draw_frame);
 }
 
-// Add a new function to update NPCs based on the current count
+// Update resetSpritePositions to explicitly pass factions
+function resetSpritePositions() {
+    // Clear existing sprites and spatial hash
+    spriteMap.clear();
+    allSprites = [];
+
+    // Re-initialize player sprite as human
+    sprite1 = initializeSpritePosition(true, "human");
+    
+    // Make sure player is first in the allSprites array
+    allSprites[0] = sprite1;
+    
+    // Re-initialize NPCs - half undead, half orcs
+    const npcCount = window.gameParams.npcCount || 5;
+    for (let i = 0; i < npcCount; i++) {
+        // Alternate between undead and orc for even distribution
+        const faction = i % 2 === 0 ? "undead" : "orc";
+        const npc = initializeSpritePosition(false, faction);
+        if (npc) {
+            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+        }
+    }
+    
+    // Update lastNpcCount to match
+    lastNpcCount = allSprites.length - 1; // Subtract 1 for player
+}
+
+// Update the updateNpcCount function to explicitly pass factions
 function updateNpcCount() {
     console.log(`Updating NPC count to ${window.gameParams.npcCount}`);
     
@@ -564,7 +592,9 @@ function updateNpcCount() {
     let successfullyCreated = 0;
     
     for (let i = 0; i < npcCount; i++) {
-        const npc = initializeSpritePosition();
+        // Alternate between undead and orc for even distribution
+        const faction = i % 2 === 0 ? "undead" : "orc";
+        const npc = initializeSpritePosition(false, faction);
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400); // Random delay
             successfullyCreated++;
@@ -582,33 +612,7 @@ function updateNpcCount() {
     console.log(`Created ${successfullyCreated} NPCs. Total sprites: ${allSprites.length}`);
 }
 
-// Add a function to reset sprite positions when map changes
-function resetSpritePositions() {
-    // Clear existing sprites and spatial hash
-    spriteMap.clear();
-    allSprites = [];
-
-    // Re-initialize player sprite
-    sprite1 = initializeSpritePosition();
-    sprite1.isPlayer = true;
-    
-    // Make sure player is first in the allSprites array
-    allSprites[0] = sprite1;
-    
-    // Re-initialize NPCs
-    const npcCount = window.gameParams.npcCount || 5;
-    for (let i = 0; i < npcCount; i++) {
-        const npc = initializeSpritePosition();
-        if (npc) {
-            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
-        }
-    }
-    
-    // Update lastNpcCount to match
-    lastNpcCount = allSprites.length - 1; // Subtract 1 for player
-}
-
-// Modify the setup function to accept both tileset URLs
+// Modify the setup function to explicitly pass factions
 async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) {
     // Wait for gameParams to be available if needed
     if (!window.gameParams) {
@@ -679,18 +683,18 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     spriteMap.clear();
     allSprites = [];
 
-    // Initialize player sprite
-    sprite1 = initializeSpritePosition();
-    sprite1.isPlayer = true; // Mark sprite1 as the player
+    // Initialize player sprite as human
+    sprite1 = initializeSpritePosition(true, "human");
     
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
     
-    // Initialize NPCs
+    // Initialize NPCs - half undead, half orcs
     const npcCount = window.gameParams.npcCount || 5;
     for (let i = 0; i < npcCount; i++) {
-        const npc = initializeSpritePosition();
-        // npc.sprite_y = Math.floor(Math.random() * 32);
+        // Alternate between undead and orc for even distribution
+        const faction = i % 2 === 0 ? "undead" : "orc";
+        const npc = initializeSpritePosition(false, faction);
         npc.movementDelay = 200 + Math.floor(Math.random() * 400);
     }
     

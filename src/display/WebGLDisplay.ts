@@ -439,7 +439,7 @@ export class WebGLDisplay {
         gl.drawArrays(primitiveType, offset, count);
     }
 
-    public drawForeground(sprite_x: number, sprite_y: number, grid_x: number, grid_y: number, camera_x: number, camera_y: number) {
+    public drawForeground(sprite_x: number, sprite_y: number, grid_x: number, grid_y: number, camera_x: number, camera_y: number, useBgTileset: boolean = false) {
         const gl = this.gl;
         const program = this.fgProgram;
 
@@ -488,13 +488,16 @@ export class WebGLDisplay {
         var offset = 0;
         gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
 
+        // Select the appropriate spritesheet dimensions based on which tileset we're using
+        const currentSpriteDims = useBgTileset ? this.bgSpriteSheetDims : this.spriteSheetDims;
+        
         // Create the texcoord buffer, make it the current ARRAY_BUFFER
-        // and copy in the texcoord values
+        // and copy in the texcoord values, using the appropriate spritesheet dimensions
         var texcoordBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
         gl.bufferData(
             gl.ARRAY_BUFFER,
-            new Float32Array(this.spriteCoords(sprite_x, sprite_y)),
+            new Float32Array(this.spriteCoords(sprite_x, sprite_y, useBgTileset)),
             gl.STATIC_DRAW);
          
         // Turn on the attribute
@@ -513,13 +516,16 @@ export class WebGLDisplay {
 
         // Pass the grid size to the shader
         gl.uniform1f(gridSizeUniformLocation, screen_grid_width);
-        gl.uniform2f(spritesheetDimsLocation, this.spriteSheetDims.width, this.spriteSheetDims.height);
+        gl.uniform2f(spritesheetDimsLocation, currentSpriteDims.width, currentSpriteDims.height);
         gl.uniform1f(spriteSizeLocation, this.spriteSize);
 
-        // Bind the foreground texture
+        // Select the appropriate texture based on useBgTileset
+        const currentTexture = useBgTileset ? this.bgTileSetTexture : this.tileSetTexture;
+        
+        // Bind the selected texture
         var texUnit = 0;
         gl.activeTexture(gl.TEXTURE0 + texUnit);
-        gl.bindTexture(gl.TEXTURE_2D, this.tileSetTexture);
+        gl.bindTexture(gl.TEXTURE_2D, currentTexture);
         gl.uniform1i(textureUniformLocation, texUnit);
 
         // Bind the attribute/buffer set we want.
@@ -543,10 +549,13 @@ export class WebGLDisplay {
         gl.drawArrays(primitiveType, offset, count);
     }
 
-    // Add this helper method to the WebGLDisplay class
-    private spriteCoords(sprite_pos_x: number, sprite_pos_y: number): number[] {
-        let t_width = this.spriteSheetDims.width * this.spriteSize;
-        let t_height = this.spriteSheetDims.height * this.spriteSize;
+    // Update the spriteCoords method to accept the useBgTileset parameter
+    private spriteCoords(sprite_pos_x: number, sprite_pos_y: number, useBgTileset: boolean = false): number[] {
+        // Choose the appropriate dimensions based on which tileset we're using
+        const dims = useBgTileset ? this.bgSpriteSheetDims : this.spriteSheetDims;
+        
+        let t_width = dims.width * this.spriteSize;
+        let t_height = dims.height * this.spriteSize;
         let sprite_size = this.spriteSize;
         
         let sprite_coord_l_x = (sprite_pos_x * sprite_size) / t_width;
