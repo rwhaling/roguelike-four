@@ -155,27 +155,37 @@ function calculateNewPosition(x, y, direction) {
 
 // Expand Sprite interface to include hitpoints
 interface Sprite {
+    // Logical grid position
     x: number;
     y: number;
+    
+    // Visual position (for rendering only)
+    visualX: number;
+    visualY: number;
+    
+    // Sprite sheet coordinates
     sprite_x: number;
     sprite_y: number;
+    
+    // Movement target
     target_x: number;
     target_y: number;
     target_time: number;
+    
     restUntil: number;
     isPlayer: boolean;
     faction: string;
+    
     // Damage effect properties
     takingDamage?: boolean;
     damageUntil?: number;
+    
     // Hitpoint properties
-    maxHitpoints: number;  // Maximum hitpoints
-    hitpoints: number;     // Current hitpoints
-    lastDamageTime?: number; // Timestamp of last damage for cooldown
-    destX: number;  // Destination X for smooth movement
-    destY: number;  // Destination Y for smooth movement
-    logicalX: number;  // Logical X position (for collision detection)
-    logicalY: number;  // Logical Y position (for collision detection)
+    maxHitpoints: number;
+    hitpoints: number;
+    lastDamageTime?: number;
+    
+    // Movement timing
     lastMoveTime: number;
     movementDelay: number;
 }
@@ -233,27 +243,43 @@ class SpatialHash {
         }
     }
     
-    // Update a sprite's position in the hash
+    // COMPLETELY REWRITTEN UPDATE METHOD
     update(sprite: Sprite, oldX: number, oldY: number, oldTargetX: number, oldTargetY: number): void {
-        // Remove from old positions
-        const oldKey = this.getKey(oldX, oldY);
-        if (this.grid[oldKey]) {
-            this.grid[oldKey] = this.grid[oldKey].filter(s => s !== sprite);
-            if (this.grid[oldKey].length === 0) {
-                delete this.grid[oldKey];
+        // First, completely remove the sprite from all its old positions
+        const oldPositions = [
+            this.getKey(oldX, oldY),
+            this.getKey(oldTargetX, oldTargetY)
+        ];
+        
+        // Remove sprite from all old positions
+        for (const key of oldPositions) {
+            if (this.grid[key]) {
+                this.grid[key] = this.grid[key].filter(s => s !== sprite);
+                if (this.grid[key].length === 0) {
+                    delete this.grid[key];
+                }
             }
         }
         
-        const oldTargetKey = this.getKey(oldTargetX, oldTargetY);
-        if (this.grid[oldTargetKey] && oldTargetKey !== oldKey) {
-            this.grid[oldTargetKey] = this.grid[oldTargetKey].filter(s => s !== sprite);
-            if (this.grid[oldTargetKey].length === 0) {
-                delete this.grid[oldTargetKey];
-            }
+        // Then add sprite to all its new positions
+        const newKey = this.getKey(sprite.x, sprite.y);
+        if (!this.grid[newKey]) {
+            this.grid[newKey] = [];
+        }
+        if (!this.grid[newKey].includes(sprite)) {
+            this.grid[newKey].push(sprite);
         }
         
-        // Add to new positions
-        this.add(sprite);
+        // Also add to target position if different
+        if (sprite.target_x !== sprite.x || sprite.target_y !== sprite.y) {
+            const targetKey = this.getKey(sprite.target_x, sprite.target_y);
+            if (!this.grid[targetKey]) {
+                this.grid[targetKey] = [];
+            }
+            if (!this.grid[targetKey].includes(sprite)) {
+                this.grid[targetKey].push(sprite);
+            }
+        }
     }
     
     // Check if a position is occupied
@@ -448,22 +474,22 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     }
     
     let progress = 1 - ((sprite.target_time - now) / interval);
+    if (progress > 1) progress = 1;
+    if (progress < 0) progress = 0;
+    
+    // Calculate visual position for smooth animation
+    sprite.visualX = (sprite.x * (1 - progress)) + (sprite.target_x * progress);
+    sprite.visualY = (sprite.y * (1 - progress)) + (sprite.target_y * progress);
+    
+    // Whether we've moved and need to update the spatial hash
+    let hasMoved = false;
     
     // For player-controlled sprite, handle input
     if (sprite.isPlayer) {
         if (progress >= 1) {
-            // Player has reached target position, check for new input direction
-            progress = 0;
-            
-            // Update position and spatial hash when movement completes
-            if (sprite.x !== sprite.target_x || sprite.y !== sprite.target_y) {
-                sprite.x = sprite.target_x;
-                sprite.y = sprite.target_y;
-                // Update spatial hash to reflect completed movement
-                spriteMap.update(sprite, oldX, oldY, oldTargetX, oldTargetY);
-            }
-            
-            let moved = false;
+            // Player has reached target position - update logical position
+            sprite.x = sprite.target_x;
+            sprite.y = sprite.target_y;
             
             // Check keys in priority order
             for (const key of MOVEMENT_PRIORITY) {
@@ -478,42 +504,34 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     
                     // Check for collision before moving
                     if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
+                        // ANIMATION FIX: Only update target position, NOT logical position
                         sprite.target_x = newPos.x;
                         sprite.target_y = newPos.y;
-                        moved = true;
+                        
+                        hasMoved = true;
                         break; // Only take the highest priority direction
                     }
                 }
             }
             
             // Only update target time if we actually moved
-            if (moved) {
+            if (hasMoved) {
                 sprite.target_time = now + interval;
-                // Update sprite in spatial hash again for the new movement
-                spriteMap.update(sprite, sprite.x, sprite.y, oldTargetX, oldTargetY);
             }
         }
     } else {
         // AI-controlled sprite with random movement
         if (progress >= 1) {
             // NPC has reached target position
-            progress = 0;
-            
-            // Update position and spatial hash when movement completes
-            if (sprite.x !== sprite.target_x || sprite.y !== sprite.target_y) {
-                sprite.x = sprite.target_x;
-                sprite.y = sprite.target_y;
-                // Update spatial hash to reflect completed movement
-                spriteMap.update(sprite, oldX, oldY, oldTargetX, oldTargetY);
-            }
+            sprite.x = sprite.target_x;
+            sprite.y = sprite.target_y;
             
             // Check if the NPC is in a rest state
             if (!sprite.restUntil || now >= sprite.restUntil) {
                 // Try up to 8 random directions if needed to find a valid move
-                let foundValidMove = false;
                 let attempts = 0;
                 
-                while (!foundValidMove && attempts < 8) {
+                while (!hasMoved && attempts < 8) {
                     // Generate random direction (-1, 0, or 1 for both x and y)
                     const randomDirection = {
                         dx: -1 + Math.floor(Math.random() * 3),
@@ -532,22 +550,20 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     
                     // Check for collision before moving
                     if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
+                        // ANIMATION FIX: Only update target position, NOT logical position
                         sprite.target_x = newPos.x;
                         sprite.target_y = newPos.y;
-                        // FIX: Use the same interval for NPCs to ensure smooth animation
+                        
                         sprite.target_time = now + interval;
-                        foundValidMove = true;
+                        hasMoved = true;
                     }
                     
                     attempts++;
                 }
                 
                 // After this move, rest for a while based on movement delay
-                if (foundValidMove) {
-                    // FIX: Rest *after* the movement is complete, not immediately
+                if (hasMoved) {
                     sprite.restUntil = now + interval + sprite.movementDelay;
-                    // Update sprite in spatial hash for the new movement
-                    spriteMap.update(sprite, sprite.x, sprite.y, oldTargetX, oldTargetY);
                 } else {
                     // If no valid move was found, try again later
                     sprite.restUntil = now + 250;
@@ -555,10 +571,22 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
             }
         }
     }
+    
+    // Update spatial hash if any position changed
+    if (sprite.x !== oldX || sprite.y !== oldY || 
+        sprite.target_x !== oldTargetX || sprite.target_y !== oldTargetY) {
+        // Debug logging to track position changes
+        // console.log(`Updating sprite from (${oldX},${oldY}) -> (${sprite.x},${sprite.y})`);
+        // console.log(`Target from (${oldTargetX},${oldTargetY}) -> (${sprite.target_x},${sprite.target_y})`);
+        
+        // Update the spatial hash with all old and new positions
+        spriteMap.update(sprite, oldX, oldY, oldTargetX, oldTargetY);
+    }
 
+    // Return visual position for rendering only
     return {
-        x: (sprite.x * (1 - progress)) + (sprite.target_x * progress),
-        y: (sprite.y * (1 - progress)) + (sprite.target_y * progress)
+        x: sprite.visualX,
+        y: sprite.visualY
     };
 }
 
@@ -610,21 +638,18 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
     const sprite = {
         x: rand_x,
         y: rand_y,
+        visualX: rand_x, // Initialize visual position to match logical position
+        visualY: rand_y,
         sprite_x: selectedSprite[0],
         sprite_y: selectedSprite[1],
         target_x: rand_x,
         target_y: rand_y,
         target_time: 250,
-        restUntil: 0,  // Track when NPC should start moving again
+        restUntil: 0,
         isPlayer: isPlayer,
         faction: faction,
-        // Initialize hitpoints based on whether it's a player
         maxHitpoints: isPlayer ? 5 : 1,
         hitpoints: isPlayer ? 5 : 1,
-        destX: rand_x,
-        destY: rand_y,
-        logicalX: rand_x,
-        logicalY: rand_y,
         lastMoveTime: Date.now(),
         movementDelay: isPlayer ? 0 : 200 + Math.floor(Math.random() * 400)
     };
@@ -724,7 +749,7 @@ function draw_frame(timestamp: number) {
         const sprite = allSprites[i];
         const spritePos = spritePositions[i];
         display.drawForeground(sprite.sprite_x, sprite.sprite_y, 
-                              spritePos.x, spritePos.y, 
+                              sprite.visualX, sprite.visualY, 
                               camera_pos_x, camera_pos_y);
         
         // If this sprite is taking damage, draw the damage effect from bg tileset
