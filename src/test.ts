@@ -176,6 +176,9 @@ interface Sprite {
     isPlayer: boolean;
     faction: string;
     
+    // NEW: Enemy factions this sprite will attack
+    enemyFactions: string[];
+    
     // Damage effect properties
     takingDamage?: boolean;
     damageUntil?: number;
@@ -460,7 +463,43 @@ function displayPlayerHealth() {
     }
 }
 
-// Modify updateSpritePosition to check for faction collisions during movement
+// NEW: Function to find the nearest enemy sprite
+function findNearestEnemy(sprite: Sprite): Sprite | null {
+    if (!sprite.enemyFactions || sprite.enemyFactions.length === 0) {
+        return null;
+    }
+    
+    let nearestEnemy: Sprite | null = null;
+    let shortestDistance = Infinity;
+    
+    for (const otherSprite of allSprites) {
+        // Skip if it's the same sprite, or if faction is not in enemy list
+        if (otherSprite === sprite || !sprite.enemyFactions.includes(otherSprite.faction)) {
+            continue;
+        }
+        
+        // Calculate Manhattan distance (more efficient than Euclidean for grid-based movement)
+        const distance = Math.abs(sprite.x - otherSprite.x) + Math.abs(sprite.y - otherSprite.y);
+        
+        // Update nearest enemy if this one is closer
+        if (distance < shortestDistance) {
+            nearestEnemy = otherSprite;
+            shortestDistance = distance;
+        }
+    }
+    
+    return nearestEnemy;
+}
+
+// NEW: Function to get direction toward target
+function getDirectionTowardTarget(fromX: number, fromY: number, toX: number, toY: number) {
+    const dx = Math.sign(toX - fromX); // Will be -1, 0, or 1
+    const dy = Math.sign(toY - fromY); // Will be -1, 0, or 1
+    
+    return { dx, dy };
+}
+
+// Modify updateSpritePosition to implement enemy targeting behavior
 function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // Store old positions for spatial hash update
     const oldX = sprite.x;
@@ -486,6 +525,7 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     
     // For player-controlled sprite, handle input
     if (sprite.isPlayer) {
+        // Player movement logic remains unchanged
         if (progress >= 1) {
             // Player has reached target position - update logical position
             sprite.x = sprite.target_x;
@@ -520,7 +560,7 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
             }
         }
     } else {
-        // AI-controlled sprite with random movement
+        // AI-controlled sprite with ENEMY TARGETING behavior
         if (progress >= 1) {
             // NPC has reached target position
             sprite.x = sprite.target_x;
@@ -528,41 +568,81 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
             
             // Check if the NPC is in a rest state
             if (!sprite.restUntil || now >= sprite.restUntil) {
-                // Try up to 8 random directions if needed to find a valid move
-                let attempts = 0;
+                // Find nearest enemy of opposing faction
+                const nearestEnemy = findNearestEnemy(sprite);
                 
-                while (!hasMoved && attempts < 8) {
-                    // Generate random direction (-1, 0, or 1 for both x and y)
-                    const randomDirection = {
-                        dx: -1 + Math.floor(Math.random() * 3),
-                        dy: -1 + Math.floor(Math.random() * 3)
-                    };
+                if (nearestEnemy) {
+                    // Get direction toward enemy
+                    const direction = getDirectionTowardTarget(
+                        sprite.x, sprite.y, 
+                        nearestEnemy.x, nearestEnemy.y
+                    );
                     
                     // Apply the same bounds-checking logic as player movement
-                    const newPos = calculateNewPosition(sprite.x, sprite.y, randomDirection);
+                    const newPos = calculateNewPosition(sprite.x, sprite.y, direction);
                     
                     // Check for faction collision before moving
                     if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-                        // We hit an enemy! Don't move into their space, but continue processing
-                        attempts++;
-                        continue;
-                    }
-                    
-                    // Check for collision before moving
-                    if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-                        // ANIMATION FIX: Only update target position, NOT logical position
+                        // We hit an enemy! Don't move into their space, but try other directions
+                        // Try other directions toward the target in order of priority
+                        const alternateDirections = [
+                            { dx: direction.dx, dy: 0 },  // horizontal movement
+                            { dx: 0, dy: direction.dy },  // vertical movement
+                            { dx: -direction.dx, dy: direction.dy }, // opposite horizontal
+                            { dx: direction.dx, dy: -direction.dy }  // opposite vertical
+                        ];
+                        
+                        for (const altDir of alternateDirections) {
+                            const altPos = calculateNewPosition(sprite.x, sprite.y, altDir);
+                            if (!isPositionOccupied(altPos.x, altPos.y, sprite) && 
+                                !checkFactionCollision(sprite, altPos.x, altPos.y)) {
+                                sprite.target_x = altPos.x;
+                                sprite.target_y = altPos.y;
+                                hasMoved = true;
+                                break;
+                            }
+                        }
+                    } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
+                        // If path is clear, move directly toward enemy
                         sprite.target_x = newPos.x;
                         sprite.target_y = newPos.y;
-                        
-                        sprite.target_time = now + interval;
                         hasMoved = true;
                     }
+                } else {
+                    // No visible enemies, move randomly as before
+                    let attempts = 0;
                     
-                    attempts++;
+                    while (!hasMoved && attempts < 8) {
+                        // Generate random direction (-1, 0, or 1 for both x and y)
+                        const randomDirection = {
+                            dx: -1 + Math.floor(Math.random() * 3),
+                            dy: -1 + Math.floor(Math.random() * 3)
+                        };
+                        
+                        // Apply the same bounds-checking logic as player movement
+                        const newPos = calculateNewPosition(sprite.x, sprite.y, randomDirection);
+                        
+                        // Check for faction collision before moving
+                        if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
+                            // We hit an enemy! Don't move into their space, but continue processing
+                            attempts++;
+                            continue;
+                        }
+                        
+                        // Check for collision before moving
+                        if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
+                            sprite.target_x = newPos.x;
+                            sprite.target_y = newPos.y;
+                            hasMoved = true;
+                        }
+                        
+                        attempts++;
+                    }
                 }
                 
-                // After this move, rest for a while based on movement delay
+                // Update timing for this move
                 if (hasMoved) {
+                    sprite.target_time = now + interval;
                     sprite.restUntil = now + interval + sprite.movementDelay;
                 } else {
                     // If no valid move was found, try again later
@@ -575,10 +655,6 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // Update spatial hash if any position changed
     if (sprite.x !== oldX || sprite.y !== oldY || 
         sprite.target_x !== oldTargetX || sprite.target_y !== oldTargetY) {
-        // Debug logging to track position changes
-        // console.log(`Updating sprite from (${oldX},${oldY}) -> (${sprite.x},${sprite.y})`);
-        // console.log(`Target from (${oldTargetX},${oldTargetY}) -> (${sprite.target_x},${sprite.target_y})`);
-        
         // Update the spatial hash with all old and new positions
         spriteMap.update(sprite, oldX, oldY, oldTargetX, oldTargetY);
     }
@@ -598,20 +674,15 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
     let rand_x, rand_y;
     let isValidPosition = false;
     let attempts = 0;
-    const MAX_ATTEMPTS = 10; // Limit the number of attempts to find a position
+    const MAX_ATTEMPTS = 10;
     
-    // Keep trying until we find a position that doesn't overlap with existing sprites
     while (!isValidPosition && attempts < MAX_ATTEMPTS) {
-        // Use actual map dimensions instead of hardcoded values
         rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 2)) + 1;
         rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 2)) + 1;
-        
-        // Check if position is already occupied
         isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
         attempts++;
     }
     
-    // Return null if we couldn't find a valid position
     if (!isValidPosition) {
         console.warn("Could not find a valid position for sprite after multiple attempts");
         return null;
@@ -627,18 +698,26 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
     } else if (faction === "orc") {
         selectedSprite = orc_sprites[Math.floor(Math.random() * orc_sprites.length)];
     } else {
-        // Default to human if unknown faction
         console.warn(`Unknown faction: ${faction}, defaulting to human`);
         selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
         faction = "human";
     }
-
-    console.log(`Created ${faction} sprite:`, selectedSprite);
+    
+    // Define enemy factions based on this sprite's faction
+    let enemyFactions: string[] = [];
+    if (faction === "orc") {
+        enemyFactions = ["undead"];
+    } else if (faction === "undead") {
+        enemyFactions = ["orc"];
+    } else if (faction === "human" && isPlayer) {
+        enemyFactions = ["orc", "undead"]; // Player can attack both
+    }
+    // Regular humans don't attack anyone
     
     const sprite = {
         x: rand_x,
         y: rand_y,
-        visualX: rand_x, // Initialize visual position to match logical position
+        visualX: rand_x,
         visualY: rand_y,
         sprite_x: selectedSprite[0],
         sprite_y: selectedSprite[1],
@@ -648,6 +727,7 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
         restUntil: 0,
         isPlayer: isPlayer,
         faction: faction,
+        enemyFactions: enemyFactions, // Add the enemy factions list
         maxHitpoints: isPlayer ? 5 : 1,
         hitpoints: isPlayer ? 5 : 1,
         lastMoveTime: Date.now(),
