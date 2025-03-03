@@ -17,6 +17,12 @@ Features::
 1. Run `pnpm install`
 1. Start coding in `main.tsx`!
 
+## Building for distribution
+
+1. Run `pnpm build`
+2. mkdir package
+3. cp -r dist/ bg_edits_1.png fg_characters.png package
+4. manually edit index.html to use relative assets/ paths
 ### Changing package managers
 
 Remove `pnpm-lock.yaml`, change/remove the `"packageManager"` field from `package.json`, and replace with a package manager of your choice (npm, yarn, bun, etc.)

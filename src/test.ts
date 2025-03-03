@@ -1,18 +1,15 @@
 import * as Crypto from "crypto-js";
 import { WebGLDisplay } from "./display/WebGLDisplay";
 import * as glu from "./display/GLUtils";
-
-// Then use the global noise variable
-// You may need to add a declaration to make TypeScript happy
-declare const noise: any;
+import { Sprite } from './types';
+import * as AI from './ai';
 
 // Add variables to track last respawn check times
 let lastOrcRespawnCheck = Date.now();
 let lastUndeadRespawnCheck = Date.now();
 
 function init() {
-    console.log(noise);
-    console.log("about to retrieve encrypted images")
+    console.log("about to load sprite sheets")
     
     // Load both sprite sheets
     loadSpriteSheets();
@@ -155,59 +152,6 @@ function calculateNewPosition(x, y, direction) {
         x: Math.max(MIN_X, Math.min(MAX_X, x + dx)),
         y: Math.max(MIN_Y, Math.min(MAX_Y, y + dy))
     };
-}
-
-// Expand Sprite interface to include structure property
-interface Sprite {
-    // Logical grid position
-    x: number;
-    y: number;
-    
-    // Visual position (for rendering only)
-    visualX: number;
-    visualY: number;
-    
-    // Sprite sheet coordinates
-    sprite_x: number;
-    sprite_y: number;
-    
-    // Previous position (for animation)
-    prev_x: number;
-    prev_y: number;
-    
-    // Animation timing
-    animationEndTime: number;
-    
-    restUntil: number;
-    isPlayer: boolean;
-    faction: string;
-    
-    // Enemy factions this sprite will attack
-    enemyFactions: string[];
-    
-    // Damage effect properties
-    takingDamage?: boolean;
-    damageUntil?: number;
-    
-    // Hitpoint properties
-    maxHitpoints: number;
-    hitpoints: number;
-    
-    // Movement timing
-    lastMoveTime: number;
-    movementDelay: number;
-    
-    // Attack cooldown
-    lastAttackTime?: number;
-    
-    // Structure flag for immobile objects like fortresses
-    isStructure?: boolean;
-    
-    // Flag to use background spritesheet for rendering
-    useBackgroundSpritesheet?: boolean;
-    
-    // Champion flag and properties
-    isChampion?: boolean;
 }
 
 // Track fortresses for easy reference
@@ -780,14 +724,6 @@ function findNearestEnemy(sprite: Sprite): Sprite | null {
     return nearestEnemy;
 }
 
-// NEW: Function to get direction toward target
-function getDirectionTowardTarget(fromX: number, fromY: number, toX: number, toY: number) {
-    const dx = Math.sign(toX - fromX); // Will be -1, 0, or 1
-    const dy = Math.sign(toY - fromY); // Will be -1, 0, or 1
-    
-    return { dx, dy };
-}
-
 // Function to update player or NPC position
 function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // Check if damage effect has expired
@@ -798,7 +734,7 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // For structures, skip movement logic and just return current position
     if (sprite.isStructure) {
         // Call fortress AI function (even though they don't move)
-        updateFortressAI(sprite, now);
+        AI.updateFortressAI(sprite, now);
         return {
             x: sprite.x,
             y: sprite.y
@@ -854,9 +790,18 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
             if (!sprite.restUntil || now >= sprite.restUntil) {
                 // Choose AI behavior based on sprite type
                 if (sprite.isChampion) {
-                    updateChampionAI(sprite, now, interval);
+                    AI.updateChampionAI(
+                        sprite, now, interval, spriteMap,
+                        findNearestEnemy, findNearestFortress,
+                        checkFactionCollision, isPositionOccupied, 
+                        calculateNewPosition
+                    );
                 } else {
-                    updateRegularEnemyAI(sprite, now, interval);
+                    AI.updateRegularEnemyAI(
+                        sprite, now, interval, spriteMap,
+                        findNearestEnemy, checkFactionCollision,
+                        isPositionOccupied, calculateNewPosition
+                    );
                 }
             }
         }
@@ -867,114 +812,6 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
         x: sprite.visualX,
         y: sprite.visualY
     };
-}
-
-// Function to update regular enemy AI
-function updateRegularEnemyAI(sprite: Sprite, now: number, interval: number) {
-    // Find nearest enemy of opposing faction
-    const nearestEnemy = findNearestEnemy(sprite);
-    
-    if (nearestEnemy) {
-        // Get direction toward enemy
-        const direction = getDirectionTowardTarget(
-            sprite.x, sprite.y, 
-            nearestEnemy.x, nearestEnemy.y
-        );
-        
-        // Apply the same bounds-checking logic as player movement
-        const newPos = calculateNewPosition(sprite.x, sprite.y, direction);
-        
-        // Check for faction collision before moving
-        if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-            // We hit an enemy, check alternate directions
-            tryAlternativeMovements(sprite, direction, now, interval);
-        } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-            // Save previous position for animation
-            sprite.prev_x = sprite.x;
-            sprite.prev_y = sprite.y;
-            
-            // Update spatial hash immediately 
-            spriteMap.updatePosition(sprite, newPos.x, newPos.y);
-            
-            // Update animation end time
-            sprite.animationEndTime = now + interval;
-            sprite.restUntil = now + interval + sprite.movementDelay;
-        }
-    }
-}
-
-// Function to update champion AI (prioritizing fortresses)
-function updateChampionAI(sprite: Sprite, now: number, interval: number) {
-    // Champions first check for nearby fortresses
-    const nearbyFortress = findNearestFortress(sprite, 2);
-    
-    if (nearbyFortress) {
-        // Get direction toward fortress
-        const direction = getDirectionTowardTarget(
-            sprite.x, sprite.y, 
-            nearbyFortress.x, nearbyFortress.y
-        );
-        
-        // Apply the same bounds-checking logic as player movement
-        const newPos = calculateNewPosition(sprite.x, sprite.y, direction);
-        
-        // Check for faction collision before moving
-        if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-            // We hit an enemy, check alternate directions
-            tryAlternativeMovements(sprite, direction, now, interval);
-        } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-            // Save previous position for animation
-            sprite.prev_x = sprite.x;
-            sprite.prev_y = sprite.y;
-            
-            // Update spatial hash immediately 
-            spriteMap.updatePosition(sprite, newPos.x, newPos.y);
-            
-            // Update animation end time
-            sprite.animationEndTime = now + interval;
-            sprite.restUntil = now + interval + sprite.movementDelay;
-        }
-    } else {
-        // No fortress nearby, fall back to regular enemy behavior
-        updateRegularEnemyAI(sprite, now, interval);
-    }
-}
-
-// Function to update fortress AI (mostly passive)
-function updateFortressAI(sprite: Sprite, now: number) {
-    // Fortresses don't move, but they could have logic for:
-    // - Periodic healing
-    // - Spawning nearby units
-    // - Alert status changes
-    
-    // Currently, fortresses have no active behavior
-    return;
-}
-
-// Helper function to try alternative movement directions
-function tryAlternativeMovements(sprite: Sprite, direction: {dx: number, dy: number}, now: number, interval: number) {
-    // Try other directions toward the target in order of priority
-    const alternateDirections = [
-        { dx: direction.dx, dy: 0 },  // horizontal movement
-        { dx: 0, dy: direction.dy },  // vertical movement
-        { dx: -direction.dx, dy: direction.dy }, // opposite horizontal
-        { dx: direction.dx, dy: -direction.dy }  // opposite vertical
-    ];
-    
-    for (const altDir of alternateDirections) {
-        const altPos = calculateNewPosition(sprite.x, sprite.y, altDir);
-        if (!isPositionOccupied(altPos.x, altPos.y, sprite) && 
-            !checkFactionCollision(sprite, altPos.x, altPos.y)) {
-            // Save previous position for animation
-            sprite.prev_x = sprite.x;
-            sprite.prev_y = sprite.y;
-            
-            spriteMap.updatePosition(sprite, altPos.x, altPos.y);
-            sprite.animationEndTime = now + interval;
-            sprite.restUntil = now + interval + sprite.movementDelay;
-            break;
-        }
-    }
 }
 
 let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
@@ -1221,7 +1058,7 @@ function draw_frame(timestamp: number) {
             camera_pos_x, 
             camera_pos_y, 
             sprite.useBackgroundSpritesheet === true, // Use bg spritesheet if specified
-            auraColor // Pass the aura color
+            auraColor as [number, number, number, number]  // Pass the aura color
         );
         
         // If this sprite is taking damage, draw the damage effect from bg tileset
@@ -1282,8 +1119,8 @@ function draw_frame(timestamp: number) {
     // Use the lighting parameter - we'll add light sources for each NPC
     if (window.gameParams.lightingEnabled) {
         // First call with player position
-        display.drawLighting(sprite1Pos.x, sprite1Pos.y, 
-                           sprite1Pos.x, sprite1Pos.y, 
+        display.drawLighting(sprite1.visualX, sprite1.visualY, 
+                           sprite1.visualX, sprite1.visualY, 
                            camera_pos_x, camera_pos_y);
         
         // Add additional light sources for NPCs if needed
@@ -1292,7 +1129,7 @@ function draw_frame(timestamp: number) {
         if (allSprites.length > 1) {
             const npc = allSprites[1];
             const npcPos = spritePositions[1];
-            display.drawLighting(sprite1Pos.x, sprite1Pos.y, 
+            display.drawLighting(npc.visualX, npc.visualY, 
                                npcPos.x, npcPos.y, 
                                camera_pos_x, camera_pos_y);
         }
