@@ -203,10 +203,17 @@ interface Sprite {
     
     // NEW: Flag to use background spritesheet for rendering
     useBackgroundSpritesheet?: boolean;
+    
+    // NEW: Champion flag and properties
+    isChampion?: boolean;
 }
 
 // Track fortresses for easy reference
 let fortresses: Sprite[] = [];
+
+// Track champions per faction
+let orcChampions = 0;
+let undeadChampions = 0;
 
 // Function to spawn fortresses
 function spawnFortresses() {
@@ -260,7 +267,8 @@ function spawnFortresses() {
         hitpoints: 20,
         lastMoveTime: 0,
         movementDelay: 0,
-        useBackgroundSpritesheet: true // Use background spritesheet
+        useBackgroundSpritesheet: true, // Use background spritesheet
+        isChampion: false
     };
     
     // Create undead fortress
@@ -283,7 +291,8 @@ function spawnFortresses() {
         hitpoints: 20,
         lastMoveTime: 0,
         movementDelay: 0,
-        useBackgroundSpritesheet: true // Use background spritesheet
+        useBackgroundSpritesheet: true, // Use background spritesheet
+        isChampion: false
     };
     
     // Add to fortresses array for reference
@@ -435,7 +444,10 @@ function checkFactionCollision(sprite: Sprite, targetX: number, targetY: number)
     
     // If there are sprites and they're of a different faction, it's a collision
     for (const targetSprite of spritesAtTarget) {
-        if (targetSprite !== sprite && targetSprite.faction !== sprite.faction) {
+        if (targetSprite !== sprite && 
+            sprite.enemyFactions && 
+            sprite.enemyFactions.includes(targetSprite.faction)) {
+            
             // Check if attacker's attack cooldown has elapsed
             const now = Date.now();
             const attackCooldown = sprite.isPlayer ? 
@@ -447,6 +459,11 @@ function checkFactionCollision(sprite: Sprite, targetX: number, targetY: number)
                 applyDamage(sprite, targetSprite);
                 // Set attacker's last attack time
                 sprite.lastAttackTime = now;
+                
+                // Special message for fortress attacks
+                if (targetSprite.isStructure) {
+                    console.log(`${sprite.faction} ${sprite.isChampion ? "champion" : "unit"} attacked ${targetSprite.faction} fortress!`);
+                }
             }
             return true;
         }
@@ -481,13 +498,27 @@ let dyingSprites: Sprite[] = [];
 function handleSpriteDefeat(sprite: Sprite) {
     console.log(`${sprite.faction} sprite was defeated!`);
     
+    // Update champion counters if needed
+    if (sprite.isChampion) {
+        if (sprite.faction === "orc") {
+            orcChampions--;
+        } else if (sprite.faction === "undead") {
+            undeadChampions--;
+        }
+    }
+    
     // If it's the player, handle game over
     if (sprite.isPlayer) {
         console.log("Game over! Player defeated.");
-        // You could add game over logic here
-        // For now, we'll just restore player health for demonstration
-        sprite.hitpoints = sprite.maxHitpoints;
-        console.log("Player respawned with full health!");
+        
+        // Update game UI state to show game over screen
+        window.gameUI.currentScreen = "gameOver";
+        window.gameUI.screenData = {
+            message: "Game Over!",
+            score: calculateScore() // You'll need to implement this function
+        };
+        
+        // We don't immediately restore player health now - that happens in resetGame
     } else {
         // Instead of removing immediately, move to dyingSprites for animation
         const index = allSprites.indexOf(sprite);
@@ -509,6 +540,32 @@ function handleSpriteDefeat(sprite: Sprite) {
         }
     }
 }
+
+// Add a function to calculate score (simple example)
+function calculateScore() {
+    // Simple score based on game time and enemy defeats
+    const factionCounts = countNpcsByFaction();
+    const initialEnemies = window.gameParams.maxOrcCount + window.gameParams.maxUndeadCount;
+    const remainingEnemies = factionCounts.orc + factionCounts.undead;
+    const defeatedEnemies = initialEnemies - remainingEnemies;
+    
+    return defeatedEnemies * 10; // 10 points per defeated enemy
+}
+
+// Add a global resetGame function that can be called from main.tsx
+window.resetGame = function() {
+    console.log("Resetting game after Game Over...");
+    
+    // Reset player health if they died
+    if (sprite1 && sprite1.hitpoints <= 0) {
+        sprite1.hitpoints = sprite1.maxHitpoints;
+    }
+    
+    // Optionally reset the entire game
+    resetSpritePositions();
+    
+    console.log("Game reset complete!");
+};
 
 // Count NPCs by faction
 function countNpcsByFaction() {
@@ -561,6 +618,26 @@ function respawnNpcAdjacentToFortress(faction: string): Sprite | null {
             pos.y > 0 && pos.y < window.gameParams.mapHeight - 1 &&
             !isPositionOccupied(pos.x, pos.y, null)) {
             
+            // Determine if this should be a champion based on spawn chance parameter
+            let isChampion = false;
+            if (faction === "orc") {
+                // Use the new parameter for orc champion spawn chance
+                const spawnChance = window.gameParams.orcChampionSpawnChance / 100; // Convert to probability
+                if (Math.random() < spawnChance && orcChampions < window.gameParams.maxOrcChampions) {
+                    isChampion = true;
+                    orcChampions++;
+                    console.log(`Respawned an Orc Champion! Current Orc champions: ${orcChampions}/${window.gameParams.maxOrcChampions}`);
+                }
+            } else if (faction === "undead") {
+                // Use the new parameter for undead champion spawn chance
+                const spawnChance = window.gameParams.undeadChampionSpawnChance / 100; // Convert to probability
+                if (Math.random() < spawnChance && undeadChampions < window.gameParams.maxUndeadChampions) {
+                    isChampion = true;
+                    undeadChampions++;
+                    console.log(`Respawned an Undead Champion! Current Undead champions: ${undeadChampions}/${window.gameParams.maxUndeadChampions}`);
+                }
+            }
+            
             // Select appropriate sprite array based on faction
             let spriteOptions = faction === "orc" ? orc_sprites : undead_sprites;
             let selectedSprite = spriteOptions[Math.floor(Math.random() * spriteOptions.length)];
@@ -580,12 +657,13 @@ function respawnNpcAdjacentToFortress(faction: string): Sprite | null {
                 isPlayer: false,
                 faction: faction,
                 enemyFactions: faction === "orc" ? ["undead"] : ["orc"],
-                maxHitpoints: 1,
-                hitpoints: 1,
+                maxHitpoints: isChampion ? 5 : 1,
+                hitpoints: isChampion ? 5 : 1,
                 lastMoveTime: Date.now(),
                 movementDelay: 200 + Math.floor(Math.random() * 400),
                 isStructure: false,
-                useBackgroundSpritesheet: false
+                useBackgroundSpritesheet: false,
+                isChampion: isChampion
             };
             
             // Add sprite to spatial hash and sprites array
@@ -639,7 +717,7 @@ function checkRespawns(now: number) {
     }
 }
 
-// Update the displayPlayerHealth function to return stats instead of modifying window.gameParams directly
+// Update the displayPlayerHealth function to show max champions from parameters
 function displayPlayerHealth() {
     let statsText = "";
     
@@ -651,6 +729,9 @@ function displayPlayerHealth() {
         const counts = countNpcsByFaction();
         statsText += ` | Orcs: ${counts.orc}/${window.gameParams.maxOrcCount} | Undead: ${counts.undead}/${window.gameParams.maxUndeadCount}`;
         
+        // Add champion counts to stats with max from parameters
+        statsText += ` | Champions: Orc ${orcChampions}/${window.gameParams.maxOrcChampions}, Undead ${undeadChampions}/${window.gameParams.maxUndeadChampions}`;
+        
         // Add fortress positions and health
         fortresses.forEach(fortress => {
             statsText += ` | ${fortress.faction} fortress: (${fortress.x},${fortress.y}) HP: ${fortress.hitpoints}/${fortress.maxHitpoints}`;
@@ -660,12 +741,48 @@ function displayPlayerHealth() {
     return statsText;
 }
 
-// NEW: Function to find the nearest enemy sprite
+// NEW: Function to find nearest fortress for champions
+function findNearestFortress(sprite: Sprite, maxDistance: number = 2): Sprite | null {
+    if (!sprite.enemyFactions || sprite.enemyFactions.length === 0) {
+        return null;
+    }
+    
+    // Only look for fortresses of enemy factions
+    const enemyFortresses = fortresses.filter(f => sprite.enemyFactions.includes(f.faction));
+    
+    let nearestFortress: Sprite | null = null;
+    let shortestDistance = Infinity;
+    
+    for (const fortress of enemyFortresses) {
+        // Calculate Manhattan distance
+        const distance = Math.abs(sprite.x - fortress.x) + Math.abs(sprite.y - fortress.y);
+        
+        // If within our max distance and closer than any previous fortress
+        if (distance <= maxDistance && distance < shortestDistance) {
+            nearestFortress = fortress;
+            shortestDistance = distance;
+        }
+    }
+    
+    return nearestFortress;
+}
+
+// Modify the findNearestEnemy function to make champions prioritize fortresses
 function findNearestEnemy(sprite: Sprite): Sprite | null {
     if (!sprite.enemyFactions || sprite.enemyFactions.length === 0) {
         return null;
     }
     
+    // CHAMPIONS: Check for nearby fortresses first if this sprite is a champion
+    if (sprite.isChampion) {
+        const nearbyFortress = findNearestFortress(sprite, 2);
+        if (nearbyFortress) {
+            // Champion found an enemy fortress within range, prioritize it!
+            return nearbyFortress;
+        }
+    }
+    
+    // If no fortress is targeted (or not a champion), continue with normal enemy finding
     let nearestEnemy: Sprite | null = null;
     let shortestDistance = Infinity;
     
@@ -985,6 +1102,26 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
     }
     // Regular humans don't attack anyone
     
+    // Determine if this NPC should be a champion
+    let isChampion = false;
+    if (!isPlayer) {
+        if (faction === "orc") {
+            // Use the new parameter for orc champion spawn chance for initial spawning
+            const spawnChance = window.gameParams.orcChampionSpawnChance / 100; // Convert to probability
+            if (Math.random() < spawnChance && orcChampions < window.gameParams.maxOrcChampions) {
+                isChampion = true;
+                orcChampions++;
+            }
+        } else if (faction === "undead") {
+            // Use the new parameter for undead champion spawn chance for initial spawning
+            const spawnChance = window.gameParams.undeadChampionSpawnChance / 100; // Convert to probability
+            if (Math.random() < spawnChance && undeadChampions < window.gameParams.maxUndeadChampions) {
+                isChampion = true;
+                undeadChampions++;
+            }
+        }
+    }
+    
     const sprite = {
         x: rand_x,
         y: rand_y,
@@ -999,12 +1136,13 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
         isPlayer: isPlayer,
         faction: faction,
         enemyFactions: enemyFactions, // Add the enemy factions list
-        maxHitpoints: isPlayer ? 5 : 1,
-        hitpoints: isPlayer ? 5 : 1,
+        maxHitpoints: isPlayer ? 10 : (isChampion ? 5 : 1),
+        hitpoints: isPlayer ? 10 : (isChampion ? 5 : 1),
         lastMoveTime: Date.now(),
         movementDelay: isPlayer ? 0 : 200 + Math.floor(Math.random() * 400),
         isStructure: false,
-        useBackgroundSpritesheet: false
+        useBackgroundSpritesheet: false,
+        isChampion: isChampion
     };
     
     // Add sprite to spatial hash
@@ -1052,44 +1190,51 @@ function draw_frame(timestamp: number) {
 
     let now = Date.now();
 
-    // Check for respawns based on respawn rates
-    checkRespawns(now);
-
-    // Check if map size has changed and regenerate map if needed
-    if (lastMapSize !== window.gameParams.mapSize) {
-        console.log("Map size changed, regenerating map");
-        window.gameParams.mapWidth = window.gameParams.mapSize;
-        window.gameParams.mapHeight = window.gameParams.mapSize;
-        let newMap = makeMap();
-        display.loadTilemap(newMap, window.gameParams.mapWidth, window.gameParams.mapHeight);
-        lastMapSize = window.gameParams.mapSize;
+    // Check if any modal is active - pause game logic if modal is showing
+    const isModalActive = window.gameUI && window.gameUI.currentScreen !== "playing";
+    
+    // Only update game state if no modal is active
+    if (!isModalActive) {
+        // Check for respawns based on respawn rates
+        checkRespawns(now);
+    
+        // Check if map size has changed and regenerate map if needed
+        if (lastMapSize !== window.gameParams.mapSize) {
+            console.log("Map size changed, regenerating map");
+            window.gameParams.mapWidth = window.gameParams.mapSize;
+            window.gameParams.mapHeight = window.gameParams.mapSize;
+            let newMap = makeMap();
+            display.loadTilemap(newMap, window.gameParams.mapWidth, window.gameParams.mapHeight);
+            lastMapSize = window.gameParams.mapSize;
+            
+            // Reset sprite positions when map changes
+            resetSpritePositions();
+        }
+    
+        // Update and get player position
+        let sprite1Pos = updateSpritePosition(sprite1, now, window.gameParams.moveSpeed);
         
-        // Reset sprite positions when map changes
-        resetSpritePositions();
+        // Update positions for all sprites
+        let spritePositions = [sprite1Pos];
+        
+        // Update all other sprites (NPCs)
+        for (let i = 1; i < allSprites.length; i++) {
+            let spritePos = updateSpritePosition(allSprites[i], now, window.gameParams.moveSpeed);
+            spritePositions.push(spritePos);
+        }
+        
+        // Check for win/lose conditions after updates
+        checkGameEndConditions();
     }
-
-    // Update and get player position
-    let sprite1Pos = updateSpritePosition(sprite1, now, window.gameParams.moveSpeed);
     
-    // Update positions for all sprites
-    let spritePositions = [sprite1Pos];
+    // If modal is active, don't update positions - use last known positions
+    let camera_pos_x = sprite1.visualX;
+    let camera_pos_y = sprite1.visualY;
+    let spritePositions = allSprites.map(sprite => ({ x: sprite.visualX, y: sprite.visualY }));
     
-    // Update all other sprites (NPCs)
-    for (let i = 1; i < allSprites.length; i++) {
-        let spritePos = updateSpritePosition(allSprites[i], now, window.gameParams.moveSpeed);
-        spritePositions.push(spritePos);
-    }
-
-    let camera_pos_x = sprite1Pos.x;
-    let camera_pos_y = sprite1Pos.y;
-
-    // Add detailed logging for debugging
-    // console.log("Camera position:", camera_pos_x, camera_pos_y);
-    // console.log("Map dimensions:", window.gameParams.mapWidth, window.gameParams.mapHeight);
-    
+    // Even while paused, still render the game (just don't update state)
     try {
-        display.drawBackground(sprite1Pos.x, sprite1Pos.y);
-        // console.log("Background drawn successfully"); // Remove debug logging
+        display.drawBackground(camera_pos_x, camera_pos_y);
     } catch (e) {
         console.error("Error drawing background:", e);
     }
@@ -1105,10 +1250,12 @@ function draw_frame(timestamp: number) {
         const sprite = allSprites[i];
         const spritePos = spritePositions[i];
         
-        // Define a blue aura color for the player
+        // Define aura color based on sprite properties
         const auraColor = sprite.isPlayer ? 
             [0.0, 0.0, 0.0, 0.0] :  // No aura for player
-            [0.0, 0.0, 0.0, 0.0];  // No aura for other sprites
+            sprite.isChampion ? 
+                [1.0, 0.1, 0.1, 1.0] :  // Yellow aura for champions
+                [0.0, 0.0, 0.0, 0.0];   // No aura for regular NPCs
         
         // Draw the sprite using the appropriate spritesheet
         display.drawForeground(
@@ -1219,6 +1366,10 @@ function draw_frame(timestamp: number) {
 // Modify resetSpritePositions to handle fortresses properly
 function resetSpritePositions() {
     console.log("Resetting sprite positions...");
+    
+    // Reset champion counters
+    orcChampions = 0;
+    undeadChampions = 0;
     
     // Clear existing sprites and spatial hash
     spriteMap.clear();
@@ -1499,9 +1650,22 @@ declare global {
       maxUndeadCount: number;
       orcRespawnRate: number;
       undeadRespawnRate: number;
-      playerAttackCooldown: number; // New: player attack cooldown in ms
-      npcAttackCooldown: number;    // New: NPC attack cooldown in ms
+      maxOrcChampions: number;          // New property
+      maxUndeadChampions: number;       // New property
+      orcChampionSpawnChance: number;   // New property
+      undeadChampionSpawnChance: number; // New property
+      playerAttackCooldown?: number;    // Optional
+      npcAttackCooldown?: number;       // Optional
     };
+    gameUI: {
+      currentScreen: string;
+      screenData: {
+        message: string;
+        score: number;
+        [key: string]: any;
+      };
+    };
+    resetGame?: () => void; // Optional function provided by test.ts
   }
 }
 
@@ -1534,6 +1698,43 @@ function handleKeyUp(event: KeyboardEvent) {
         case 'e': keyState.e = false; break;
         case 'z': keyState.z = false; break;
         case 'c': keyState.c = false; break;
+    }
+}
+
+// Add a function to check for win/lose conditions
+function checkGameEndConditions() {
+    // Check if any fortress has been destroyed
+    const orcFortress = fortresses.find(f => f.faction === "orc");
+    const undeadFortress = fortresses.find(f => f.faction === "undead");
+    
+    // Game over if player's (orc) fortress is destroyed
+    if (orcFortress && orcFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+        console.log("Game over - Orc fortress destroyed!");
+        
+        // Calculate final score
+        const score = calculateScore();
+        
+        // Set game over screen with appropriate message
+        window.gameUI.currentScreen = "gameOver";
+        window.gameUI.screenData = {
+            message: "Game Over! The orc fortress was destroyed.",
+            score: score
+        };
+    }
+    
+    // Victory if enemy (undead) fortress is destroyed
+    if (undeadFortress && undeadFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+        console.log("Victory - Undead fortress destroyed!");
+        
+        // Calculate final score
+        const score = calculateScore();
+        
+        // Set win screen with appropriate message
+        window.gameUI.currentScreen = "gameOver";
+        window.gameUI.screenData = {
+            message: "You Win! The undead fortress is destroyed.",
+            score: score
+        };
     }
 }
 

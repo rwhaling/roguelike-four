@@ -14,11 +14,88 @@ window.gameParams = {
   maxOrcCount: 20,
   maxUndeadCount: 20,
   orcRespawnRate: 200,
-  undeadRespawnRate: 200
+  undeadRespawnRate: 200,
+  // New champion-related parameters
+  maxOrcChampions: 2,
+  maxUndeadChampions: 2,
+  orcChampionSpawnChance: 10,
+  undeadChampionSpawnChance: 10
+};
+
+// Create a separate UI state object to manage game screens
+window.gameUI = {
+  currentScreen: "playing", // "playing", "gameOver", "titleScreen", "shop"
+  screenData: {
+    message: "Game Over!",
+    score: 0,
+    // Other screen-specific data can be added here
+  }
 };
 
 // Now import test.ts after initialization
 import "./test";
+
+// Game UI Screen Components
+function GameModals() {
+  const [currentScreen, setCurrentScreen] = useState(window.gameUI.currentScreen);
+  const [screenData, setScreenData] = useState(window.gameUI.screenData);
+  
+  // Update UI state when window.gameUI changes
+  React.useEffect(() => {
+    const updateGameUI = () => {
+      setCurrentScreen(window.gameUI.currentScreen);
+      setScreenData({...window.gameUI.screenData});
+    };
+    
+    // Update every 100ms to reflect changes from test.ts
+    const intervalId = setInterval(updateGameUI, 100);
+    
+    // Cleanup on unmount
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Render different screens based on currentScreen value
+  if (currentScreen === "gameOver") {
+    return <GameOverScreen data={screenData} />;
+  }
+  
+  // Add more screen components as needed
+  // if (currentScreen === "titleScreen") return <TitleScreen data={screenData} />;
+  // if (currentScreen === "shop") return <ShopScreen data={screenData} />;
+  
+  // Return null when playing (no modal)
+  return null;
+}
+
+function GameOverScreen({ data }) {
+  return (
+    <div className="game-modal game-over">
+      <div className="modal-content">
+        <h2 className="text-4xl font-bold mb-4 text-white-600">{data.message}</h2>
+        {data.score > 0 && <p className="text-xl mb-6">Score: {data.score}</p>}
+        <button 
+          className="px-6 py-3 bg-red-600 hover:bg-white-700 text-white font-bold rounded-lg"
+          onClick={() => restartGame()}
+        >
+          Restart Game
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Function to restart the game
+function restartGame() {
+  // Reset game UI state
+  window.gameUI.currentScreen = "playing";
+  
+  // Call reset function in test.ts if it exists
+  if (typeof window.resetGame === "function") {
+    window.resetGame();
+  } else {
+    console.error("resetGame function not found in test.ts");
+  }
+}
 
 function GameParametersApp() {
   const [gameParameters, setGameParameters] = useState(window.gameParams);
@@ -58,7 +135,9 @@ function GameParametersApp() {
       orcCount: "N/A",
       undeadCount: "N/A",
       orcFortress: "N/A",
-      undeadFortress: "N/A"
+      undeadFortress: "N/A",
+      orcChampions: "N/A",
+      undeadChampions: "N/A"
     };
     
     if (!statsString || statsString === "Initializing...") return stats;
@@ -88,6 +167,13 @@ function GameParametersApp() {
     
     const undeadFortressMatch = statsString.match(/undead fortress: \(([\d]+),([\d]+)\) HP: (\d+)\/(\d+)/);
     if (undeadFortressMatch) stats.undeadFortress = `Pos: (${undeadFortressMatch[1]},${undeadFortressMatch[2]}) HP: ${undeadFortressMatch[3]}/${undeadFortressMatch[4]}`;
+    
+    // Extract champion counts
+    const championMatch = statsString.match(/Champions: Orc (\d+)\/(\d+), Undead (\d+)\/(\d+)/);
+    if (championMatch) {
+      stats.orcChampions = `${championMatch[1]}/${championMatch[2]}`;
+      stats.undeadChampions = `${championMatch[3]}/${championMatch[4]}`;
+    }
     
     return stats;
   };
@@ -261,6 +347,90 @@ function GameParametersApp() {
         </span>
       </div>
       
+      {/* Max Orc Champions */}
+      <div className="mb-4 flex items-center gap-4">
+        <label className="w-32 font-medium text-gray-700">Max Orc Champions</label>
+        <input
+          type="range"
+          min="0"
+          max="10"
+          step="1"
+          value={gameParameters.maxOrcChampions}
+          className="flex-grow"
+          onChange={(e) => {
+            const value = parseInt(e.target.value);
+            window.gameParams.maxOrcChampions = value;
+            setGameParameters({...window.gameParams, maxOrcChampions: value});
+          }}
+        />
+        <span className="w-16 text-right text-gray-600">
+          {gameParameters.maxOrcChampions}
+        </span>
+      </div>
+      
+      {/* Max Undead Champions */}
+      <div className="mb-4 flex items-center gap-4">
+        <label className="w-32 font-medium text-gray-700">Max Undead Champions</label>
+        <input
+          type="range"
+          min="0"
+          max="10"
+          step="1"
+          value={gameParameters.maxUndeadChampions}
+          className="flex-grow"
+          onChange={(e) => {
+            const value = parseInt(e.target.value);
+            window.gameParams.maxUndeadChampions = value;
+            setGameParameters({...window.gameParams, maxUndeadChampions: value});
+          }}
+        />
+        <span className="w-16 text-right text-gray-600">
+          {gameParameters.maxUndeadChampions}
+        </span>
+      </div>
+      
+      {/* Orc Champion Spawn % */}
+      <div className="mb-4 flex items-center gap-4">
+        <label className="w-32 font-medium text-gray-700">Orc Champion %</label>
+        <input
+          type="range"
+          min="0"
+          max="50"
+          step="1"
+          value={gameParameters.orcChampionSpawnChance}
+          className="flex-grow"
+          onChange={(e) => {
+            const value = parseInt(e.target.value);
+            window.gameParams.orcChampionSpawnChance = value;
+            setGameParameters({...window.gameParams, orcChampionSpawnChance: value});
+          }}
+        />
+        <span className="w-16 text-right text-gray-600">
+          {gameParameters.orcChampionSpawnChance}%
+        </span>
+      </div>
+      
+      {/* Undead Champion Spawn % */}
+      <div className="mb-4 flex items-center gap-4">
+        <label className="w-32 font-medium text-gray-700">Undead Champion %</label>
+        <input
+          type="range"
+          min="0"
+          max="50"
+          step="1"
+          value={gameParameters.undeadChampionSpawnChance}
+          className="flex-grow"
+          onChange={(e) => {
+            const value = parseInt(e.target.value);
+            window.gameParams.undeadChampionSpawnChance = value;
+            setGameParameters({...window.gameParams, undeadChampionSpawnChance: value});
+          }}
+        />
+        <span className="w-16 text-right text-gray-600">
+          {gameParameters.undeadChampionSpawnChance}%
+        </span>
+      </div>
+      
       {/* Game Status (Read-only fields) */}
       <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
         <h3 className="text-lg font-semibold mb-3 text-gray-700">Game Status</h3>
@@ -321,6 +491,23 @@ function GameParametersApp() {
                 value={stats.undeadCount} 
                 className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
               />
+              
+              {/* Add champion status */}
+              <div className="text-sm text-gray-700">Orc Champions:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.orcChampions} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
+              
+              <div className="text-sm text-gray-700">Undead Champions:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.undeadChampions} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
             </div>
           </div>
           
@@ -351,6 +538,16 @@ function GameParametersApp() {
   );
 }
 
+// Main App component to organize the UI structure
+function App() {
+  return (
+    <>
+      <GameModals />
+      <GameParametersApp />
+    </>
+  );
+}
+
 // Render Game parameters to the game-params-container
 const gameParamsContainer = document.getElementById("game-params-container");
 if (gameParamsContainer) {
@@ -358,6 +555,15 @@ if (gameParamsContainer) {
   gameParamsRoot.render(<GameParametersApp />);
 } else {
   console.error("Cannot find element #game-params-container");
+}
+
+// Render Game UI modals to the game-ui-container
+const gameUIContainer = document.getElementById("game-ui-container");
+if (gameUIContainer) {
+  const gameUIRoot = createRoot(gameUIContainer);
+  gameUIRoot.render(<GameModals />);
+} else {
+  console.error("Cannot find element #game-ui-container");
 }
 
 // Add TypeScript declaration for window.gameParams
@@ -375,7 +581,22 @@ declare global {
       maxUndeadCount: number;
       orcRespawnRate: number;
       undeadRespawnRate: number;
+      maxOrcChampions: number;
+      maxUndeadChampions: number;
+      orcChampionSpawnChance: number;
+      undeadChampionSpawnChance: number;
+      playerAttackCooldown?: number;
+      npcAttackCooldown?: number;
     };
+    gameUI: {
+      currentScreen: string;
+      screenData: {
+        message: string;
+        score: number;
+        [key: string]: any;
+      };
+    };
+    resetGame?: () => void; // Optional function provided by test.ts
   }
 }
 

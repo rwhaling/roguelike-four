@@ -447,7 +447,7 @@ export class WebGLDisplay {
         camera_x: number, 
         camera_y: number, 
         useBgTileset: boolean = false,
-        auraColor: [number, number, number, number] = [0.0, 0.0, 0.0, 0.0] // New parameter for aura color
+        auraColor: [number, number, number, number] = [0.0, 0.0, 0.0, 0.0]
     ) {
         const gl = this.gl;
         const program = this.fgProgram;
@@ -550,7 +550,8 @@ export class WebGLDisplay {
 
         gl.uniform4f(spriteTranspUniformLocation, 1.0, 1.0, 1.0, 1.0);
         gl.uniform4f(auraColorUniformLocation, 
-            auraColor[0], auraColor[1], auraColor[2], auraColor[3]);
+            auraColor[0], auraColor[1], auraColor[2], 
+            auraColor[3] > 0 ? Math.max(0.7, auraColor[3]) : 0); // Ensure non-zero alpha is at least 0.7
 
         // draw
         var primitiveType = gl.TRIANGLE_STRIP;

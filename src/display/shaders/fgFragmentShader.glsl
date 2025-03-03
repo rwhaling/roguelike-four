@@ -72,12 +72,12 @@ void main() {
   // Define the off-black color from the sprite sheet (#0F0425)
   vec4 offBlack = vec4(0.059, 0.016, 0.145, 1.0);
   
-  // Check if the pixel is transparent or has the off-black background color
+  // Check if the pixel is specifically the off-black background color
   // Using a small threshold to handle color variations
-  bool isTransparent = (outColor.a < 0.1) || 
-                      (length(outColor.rgb - offBlack.rgb) < 0.1);
+  bool isOffBlack = length(outColor.rgb - offBlack.rgb) < 0.1 && outColor.a > 0.9;
   
-  if (isTransparent) {
+  // Skip sprite boundary pixels to avoid bleeding effects
+  if (isOffBlack) {
     if (mod(v_texcoord.y * sheet_height_px, u_sprite_size) > u_sprite_size - 1.0) {
       return;         
     } else if (mod(v_texcoord.y * sheet_height_px, u_sprite_size) < 1.0) {
@@ -94,45 +94,59 @@ void main() {
     float y_offset = 1.0 / sheet_height_px;
     float x_offset = 1.0 / sheet_width_px;
     
+    // Check neighboring pixels for non-off-black, non-transparent content
     vec4 blurDown1 = texture(u_texture, v_texcoord + vec2(0.0, y_offset));
     if (mod(v_texcoord.y * sheet_height_px + 1.0, u_sprite_size) <= u_sprite_size - 1.0) {
         // Only add to blur if the sampled pixel is NOT transparent or offBlack
-        if (!(blurDown1.a < 0.1 || length(blurDown1.rgb - offBlack.rgb) < 0.1)) {
+        if (blurDown1.a > 0.1 && length(blurDown1.rgb - offBlack.rgb) >= 0.1) {
             blurredColor += blurDown1;
         }
     }
+    
     vec4 blurUp1 = texture(u_texture, v_texcoord + vec2(0.0, -y_offset));
     if (mod(v_texcoord.y * sheet_height_px - 1.0, u_sprite_size) >= 1.0) {
-        if (!(blurUp1.a < 0.1 || length(blurUp1.rgb - offBlack.rgb) < 0.1)) {
+        if (blurUp1.a > 0.1 && length(blurUp1.rgb - offBlack.rgb) >= 0.1) {
             blurredColor += blurUp1;
         }
     }
+    
     vec4 blurLeft1 = texture(u_texture, v_texcoord + vec2(x_offset, 0.0));
     if (mod(v_texcoord.x * sheet_width_px + 1.0, u_sprite_size) <= u_sprite_size - 1.0) {
-        if (!(blurLeft1.a < 0.1 || length(blurLeft1.rgb - offBlack.rgb) < 0.1)) {
+        if (blurLeft1.a > 0.1 && length(blurLeft1.rgb - offBlack.rgb) >= 0.1) {
             blurredColor += blurLeft1;
         }
     }
+    
     vec4 blurRight1 = texture(u_texture, v_texcoord + vec2(-x_offset, 0.0));
     if (mod(v_texcoord.x * sheet_width_px - 1.0, u_sprite_size) >= 1.0) {
-        if (!(blurRight1.a < 0.1 || length(blurRight1.rgb - offBlack.rgb) < 0.1)) {
+        if (blurRight1.a > 0.1 && length(blurRight1.rgb - offBlack.rgb) >= 0.1) {
             blurredColor += blurRight1;
         }
     }
 
-    vec4 auraHighlightColor = u_aura_color * vec4(0.5,0.5,0.5,1.0);
-
+    // Only apply the aura if we found adjacent non-off-black, non-transparent pixels
     if (blurredColor != vec4(0.0,0.0,0.0,0.0)) {
+      // Define the off-black color to use in the mix
+      vec4 offBlackAura = vec4(0.059, 0.016, 0.145, 0.8);
+      
+      // Generate the noise with faster movement
+      float noiseValue = abs(noise(vec3(
+        floor(v_texcoord.x * sheet_width_px),
+        floor(v_texcoord.y * sheet_height_px),
+        t_raw * 5.0 // Fast animation
+      )));
+      
+      // Mix between off-black and aura color based on noise
+      // No scaling now, using full [0,1] range for more extreme effect
       vec4 noiseColor = mix(
-        u_aura_color,
-        auraHighlightColor,
-        abs(noise(vec3(
-          floor(v_texcoord.x * sheet_width_px),
-          floor(v_texcoord.y * sheet_height_px),
-          t_raw * 5.0
-        )))
+        offBlackAura,                  // Start with off-black
+        u_aura_color * vec4(1.1, 1.1, 1.1, 0.85),  // Slightly brighter aura color
+        noiseValue    // Full noise range for more dramatic effect
       );
+      
+      // Replace only the off-black pixels with the mixed aura color
       outColor = noiseColor;
-    } 
-  } 
+    }
+  }
+  // For non-off-black pixels, keep the original color (already set to outColor)
 }
