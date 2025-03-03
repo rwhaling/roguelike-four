@@ -797,6 +797,8 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     
     // For structures, skip movement logic and just return current position
     if (sprite.isStructure) {
+        // Call fortress AI function (even though they don't move)
+        updateFortressAI(sprite, now);
         return {
             x: sprite.x,
             y: sprite.y
@@ -844,62 +846,17 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
             }
         }
     } else {
-        // AI-controlled sprite with ENEMY TARGETING behavior
+        // AI-controlled sprite
         if (progress >= 1) {
             // NPC has reached its visual target
             
             // Check if the NPC is in a rest state
             if (!sprite.restUntil || now >= sprite.restUntil) {
-                // Find nearest enemy of opposing faction
-                const nearestEnemy = findNearestEnemy(sprite);
-                
-                if (nearestEnemy) {
-                    // Get direction toward enemy
-                    const direction = getDirectionTowardTarget(
-                        sprite.x, sprite.y, 
-                        nearestEnemy.x, nearestEnemy.y
-                    );
-                    
-                    // Apply the same bounds-checking logic as player movement
-                    const newPos = calculateNewPosition(sprite.x, sprite.y, direction);
-                    
-                    // Check for faction collision before moving
-                    if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-                        // We hit an enemy, check alternate directions
-                        // Try other directions toward the target in order of priority
-                        const alternateDirections = [
-                            { dx: direction.dx, dy: 0 },  // horizontal movement
-                            { dx: 0, dy: direction.dy },  // vertical movement
-                            { dx: -direction.dx, dy: direction.dy }, // opposite horizontal
-                            { dx: direction.dx, dy: -direction.dy }  // opposite vertical
-                        ];
-                        
-                        for (const altDir of alternateDirections) {
-                            const altPos = calculateNewPosition(sprite.x, sprite.y, altDir);
-                            if (!isPositionOccupied(altPos.x, altPos.y, sprite) && 
-                                !checkFactionCollision(sprite, altPos.x, altPos.y)) {
-                                // Save previous position for animation
-                                sprite.prev_x = sprite.x;
-                                sprite.prev_y = sprite.y;
-                                
-                                spriteMap.updatePosition(sprite, altPos.x, altPos.y);
-                                sprite.animationEndTime = now + interval;
-                                sprite.restUntil = now + interval + sprite.movementDelay;
-                                break;
-                            }
-                        }
-                    } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-                        // Save previous position for animation
-                        sprite.prev_x = sprite.x;
-                        sprite.prev_y = sprite.y;
-                        
-                        // Update spatial hash immediately 
-                        spriteMap.updatePosition(sprite, newPos.x, newPos.y);
-                        
-                        // Update animation end time
-                        sprite.animationEndTime = now + interval;
-                        sprite.restUntil = now + interval + sprite.movementDelay;
-                    }
+                // Choose AI behavior based on sprite type
+                if (sprite.isChampion) {
+                    updateChampionAI(sprite, now, interval);
+                } else {
+                    updateRegularEnemyAI(sprite, now, interval);
                 }
             }
         }
@@ -910,6 +867,114 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
         x: sprite.visualX,
         y: sprite.visualY
     };
+}
+
+// Function to update regular enemy AI
+function updateRegularEnemyAI(sprite: Sprite, now: number, interval: number) {
+    // Find nearest enemy of opposing faction
+    const nearestEnemy = findNearestEnemy(sprite);
+    
+    if (nearestEnemy) {
+        // Get direction toward enemy
+        const direction = getDirectionTowardTarget(
+            sprite.x, sprite.y, 
+            nearestEnemy.x, nearestEnemy.y
+        );
+        
+        // Apply the same bounds-checking logic as player movement
+        const newPos = calculateNewPosition(sprite.x, sprite.y, direction);
+        
+        // Check for faction collision before moving
+        if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
+            // We hit an enemy, check alternate directions
+            tryAlternativeMovements(sprite, direction, now, interval);
+        } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
+            // Save previous position for animation
+            sprite.prev_x = sprite.x;
+            sprite.prev_y = sprite.y;
+            
+            // Update spatial hash immediately 
+            spriteMap.updatePosition(sprite, newPos.x, newPos.y);
+            
+            // Update animation end time
+            sprite.animationEndTime = now + interval;
+            sprite.restUntil = now + interval + sprite.movementDelay;
+        }
+    }
+}
+
+// Function to update champion AI (prioritizing fortresses)
+function updateChampionAI(sprite: Sprite, now: number, interval: number) {
+    // Champions first check for nearby fortresses
+    const nearbyFortress = findNearestFortress(sprite, 2);
+    
+    if (nearbyFortress) {
+        // Get direction toward fortress
+        const direction = getDirectionTowardTarget(
+            sprite.x, sprite.y, 
+            nearbyFortress.x, nearbyFortress.y
+        );
+        
+        // Apply the same bounds-checking logic as player movement
+        const newPos = calculateNewPosition(sprite.x, sprite.y, direction);
+        
+        // Check for faction collision before moving
+        if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
+            // We hit an enemy, check alternate directions
+            tryAlternativeMovements(sprite, direction, now, interval);
+        } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
+            // Save previous position for animation
+            sprite.prev_x = sprite.x;
+            sprite.prev_y = sprite.y;
+            
+            // Update spatial hash immediately 
+            spriteMap.updatePosition(sprite, newPos.x, newPos.y);
+            
+            // Update animation end time
+            sprite.animationEndTime = now + interval;
+            sprite.restUntil = now + interval + sprite.movementDelay;
+        }
+    } else {
+        // No fortress nearby, fall back to regular enemy behavior
+        updateRegularEnemyAI(sprite, now, interval);
+    }
+}
+
+// Function to update fortress AI (mostly passive)
+function updateFortressAI(sprite: Sprite, now: number) {
+    // Fortresses don't move, but they could have logic for:
+    // - Periodic healing
+    // - Spawning nearby units
+    // - Alert status changes
+    
+    // Currently, fortresses have no active behavior
+    return;
+}
+
+// Helper function to try alternative movement directions
+function tryAlternativeMovements(sprite: Sprite, direction: {dx: number, dy: number}, now: number, interval: number) {
+    // Try other directions toward the target in order of priority
+    const alternateDirections = [
+        { dx: direction.dx, dy: 0 },  // horizontal movement
+        { dx: 0, dy: direction.dy },  // vertical movement
+        { dx: -direction.dx, dy: direction.dy }, // opposite horizontal
+        { dx: direction.dx, dy: -direction.dy }  // opposite vertical
+    ];
+    
+    for (const altDir of alternateDirections) {
+        const altPos = calculateNewPosition(sprite.x, sprite.y, altDir);
+        if (!isPositionOccupied(altPos.x, altPos.y, sprite) && 
+            !checkFactionCollision(sprite, altPos.x, altPos.y)) {
+            // Save previous position for animation
+            sprite.prev_x = sprite.x;
+            sprite.prev_y = sprite.y;
+            
+            spriteMap.updatePosition(sprite, altPos.x, altPos.y);
+            sprite.animationEndTime = now + interval;
+            sprite.restUntil = now + interval + sprite.movementDelay;
+            break;
+        }
+    }
 }
 
 let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
