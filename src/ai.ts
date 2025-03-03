@@ -6,7 +6,8 @@ import { Entity, AIAction, ActionType } from './types';
 export function updateRegularEnemyAI(
     entity: Entity,
     findNearestEnemy: (entity: Entity) => Entity | null,
-    calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number}
+    calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number},
+    isPositionBlocked: (x: number, y: number) => boolean
 ): AIAction {
     // Find nearest enemy of opposing faction
     const nearestEnemy = findNearestEnemy(entity);
@@ -32,6 +33,27 @@ export function updateRegularEnemyAI(
         // Calculate desired position
         const newPos = calculateNewPosition(entity.x, entity.y, direction);
         
+        // Check if the position is blocked
+        if (isPositionBlocked(newPos.x, newPos.y)) {
+            // Get alternative positions
+            const alternatives = getAlternativeMovements(entity, direction, calculateNewPosition);
+            
+            // Filter out blocked positions
+            const validAlternatives = alternatives.filter(pos => !isPositionBlocked(pos.x, pos.y));
+            
+            // If there are valid alternatives, choose one randomly
+            if (validAlternatives.length > 0) {
+                const randomPos = validAlternatives[Math.floor(Math.random() * validAlternatives.length)];
+                return {
+                    type: ActionType.MOVE,
+                    targetX: randomPos.x,
+                    targetY: randomPos.y
+                };
+            }
+            // If no valid alternatives, return idle
+            return { type: ActionType.IDLE };
+        }
+        
         // Return move action
         return {
             type: ActionType.MOVE,
@@ -48,13 +70,14 @@ export function updateRegularEnemyAI(
 export function updateChampionAI(
     entity: Entity,
     findNearestEnemy: (entity: Entity) => Entity | null,
-    findNearestFortress: (entity: Entity, maxDistance: number) => Entity | null,
-    calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number}
+    calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number},
+    isPositionBlocked: (x: number, y: number) => boolean
 ): AIAction {
-    // Champions first check for nearby fortresses
-    const nearbyFortress = findNearestFortress(entity, 2);
+    // Champions first check for nearby fortresses (inlined here instead of parameter)
+    const nearbyFortress = findNearestEnemy(entity);
     
-    if (nearbyFortress) {
+    // Special case - if the nearest enemy is a fortress, prioritize it
+    if (nearbyFortress && nearbyFortress.isStructure) {
         // Check if we're adjacent to the fortress
         const distance = Math.abs(entity.x - nearbyFortress.x) + Math.abs(entity.y - nearbyFortress.y);
         
@@ -75,6 +98,27 @@ export function updateChampionAI(
         // Calculate desired position
         const newPos = calculateNewPosition(entity.x, entity.y, direction);
         
+        // Check if the position is blocked
+        if (isPositionBlocked(newPos.x, newPos.y)) {
+            // Get alternative positions
+            const alternatives = getAlternativeMovements(entity, direction, calculateNewPosition);
+            
+            // Filter out blocked positions
+            const validAlternatives = alternatives.filter(pos => !isPositionBlocked(pos.x, pos.y));
+            
+            // If there are valid alternatives, choose one randomly
+            if (validAlternatives.length > 0) {
+                const randomPos = validAlternatives[Math.floor(Math.random() * validAlternatives.length)];
+                return {
+                    type: ActionType.MOVE,
+                    targetX: randomPos.x,
+                    targetY: randomPos.y
+                };
+            }
+            // If no valid alternatives, return idle
+            return { type: ActionType.IDLE };
+        }
+        
         // Return move action
         return {
             type: ActionType.MOVE,
@@ -86,7 +130,8 @@ export function updateChampionAI(
         return updateRegularEnemyAI(
             entity,
             findNearestEnemy,
-            calculateNewPosition
+            calculateNewPosition,
+            isPositionBlocked
         );
     }
 }

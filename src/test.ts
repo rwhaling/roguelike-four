@@ -3,6 +3,13 @@ import { WebGLDisplay } from "./display/WebGLDisplay";
 import * as glu from "./display/GLUtils";
 import { Sprite, Entity, GameObject, Visual, AIAction, ActionType } from './types';
 import * as AI from './ai';
+import { 
+    animationManager, 
+    updateAnimations, 
+    triggerMoveAnimation, 
+    triggerDamageAnimation, 
+    triggerDeathAnimation 
+} from './animation';
 
 // Add variables to track last respawn check times
 let lastOrcRespawnCheck = Date.now();
@@ -374,34 +381,14 @@ function checkFactionCollision(entity: Entity, targetX: number, targetY: number)
     return false;
 }
 
-// Function to apply damage to a sprite
-function applyDamage(attacker: Sprite, target: Sprite) {
-    const now = Date.now();
-    
-    // Apply damage effect immediately (no cooldown on receiving damage)
-    target.takingDamage = true;
-    target.damageUntil = now + 150; // Show damage effect for 150ms
-    
-    // Reduce hitpoints
-    target.hitpoints -= 1;
-    
-    console.log(`${target.faction} sprite took damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
-    
-    // Check if the sprite is defeated
-    if (target.hitpoints <= 0) {
-        // Pass the attacker to handleSpriteDefeat so it can move to target's position
-        handleSpriteDefeat(target, attacker);
-    }
-}
-
 // Add an array to track defeated sprites during their death animation
 let dyingSprites: Sprite[] = [];
 
 // Function to handle sprite defeat
-function handleSpriteDefeat(sprite: Sprite, attacker?: Sprite) {
-    console.log(`${sprite.faction} sprite was defeated!`);
+function handleSpriteDefeat(sprite: Sprite, attacker: Sprite | null) {
+    console.log(`${sprite.faction} sprite defeated!`);
     
-    // Update champion counters if needed
+    // Update champion count if necessary
     if (sprite.isChampion) {
         if (sprite.faction === "orc") {
             orcChampions--;
@@ -414,18 +401,33 @@ function handleSpriteDefeat(sprite: Sprite, attacker?: Sprite) {
     if (sprite.isPlayer) {
         console.log("Game over! Player defeated.");
         
-        // Update game UI state to show game over screen
+        // Update game UI state
         window.gameUI.currentScreen = "gameOver";
         window.gameUI.screenData = {
             message: "Game Over!",
             score: calculateScore() 
         };
-        
-        // We don't immediately restore player health now - that happens in resetGame
     } else {
         // Store the position of the defeated sprite before removing it
         const defeatedX = sprite.x;
         const defeatedY = sprite.y;
+        
+        // Define the death animation duration
+        const deathDuration = 300; // Same as the default in triggerDeathAnimation
+        
+        // Create a copy of the sprite with proper animation timing
+        const dyingSpriteCopy = {...sprite, 
+            takingDamage: true,
+            damageUntil: Date.now() + deathDuration
+        };
+        
+        // Add to dyingSprites array for death animation
+        dyingSprites.push(dyingSpriteCopy);
+        
+        // Trigger death animation on the original sprite
+        // This isn't strictly necessary since we're removing it,
+        // but we keep it for consistency with the animation system
+        triggerDeathAnimation(sprite);
         
         // Remove from spatial hash immediately
         spriteMap.remove(sprite);
@@ -435,26 +437,21 @@ function handleSpriteDefeat(sprite: Sprite, attacker?: Sprite) {
         if (index > -1) {
             allSprites.splice(index, 1);
             
-            // Add to dying sprites array for animation only
-            sprite.takingDamage = true;
-            sprite.damageUntil = Date.now() + 150;
-            dyingSprites.push(sprite);
-            
             console.log(`${sprite.faction} NPC removed from game. Remaining: ${countNpcsByFaction()[sprite.faction]}`);
             
             // If we have an attacker, immediately move them into the defeated sprite's position
             if (attacker && !attacker.isStructure) {
                 console.log(`Moving ${attacker.faction} attacker to position (${defeatedX}, ${defeatedY})`);
                 
-                // Save previous position for animation
-                attacker.prev_x = attacker.x;
-                attacker.prev_y = attacker.y;
+                // Save previous position
+                const prevX = attacker.x;
+                const prevY = attacker.y;
                 
-                // Update the spatial hash immediately
+                // Update logical position
                 spriteMap.updatePosition(attacker, defeatedX, defeatedY);
                 
-                // Set animation end time
-                attacker.animationEndTime = Date.now() + window.gameParams.moveSpeed;
+                // Trigger animation
+                triggerMoveAnimation(attacker, prevX, prevY, defeatedX, defeatedY, window.gameParams.moveSpeed);
             }
         }
     }
@@ -728,34 +725,21 @@ function findNearestEnemy(sprite: Entity): Entity | null {
 
 // Function to update player or NPC position
 function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
-    // Check if damage effect has expired
-    if (sprite.takingDamage && sprite.damageUntil && now >= sprite.damageUntil) {
-        sprite.takingDamage = false;
-    }
-    
     // For structures, skip movement logic and just return current position
     if (sprite.isStructure) {
         // Call fortress AI function (even though they don't move)
         const action = AI.updateFortressAI(sprite);
         // We don't do anything with fortress actions currently
         return {
-            x: sprite.x,
-            y: sprite.y
+            x: sprite.visualX,
+            y: sprite.visualY
         };
     }
     
-    // Calculate animation progress
-    let progress = 1 - ((sprite.animationEndTime - now) / interval);
-    if (progress > 1) progress = 1;
-    if (progress < 0) progress = 0;
-    
-    // Calculate visual position for smooth animation
-    sprite.visualX = (sprite.prev_x * (1 - progress)) + (sprite.x * progress);
-    sprite.visualY = (sprite.prev_y * (1 - progress)) + (sprite.y * progress);
-    
     // For player-controlled sprite, handle input
     if (sprite.isPlayer) {
-        if (progress >= 1) {
+        // Only process input if no animation is currently running
+        if (now >= sprite.animationEndTime) {
             // Check keys in priority order
             for (const key of MOVEMENT_PRIORITY) {
                 if (keyState[key]) {
@@ -769,15 +753,15 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     
                     // Check for collision before moving
                     if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-                        // Save previous position for animation
-                        sprite.prev_x = sprite.x;
-                        sprite.prev_y = sprite.y;
+                        // Save previous position
+                        const prevX = sprite.x;
+                        const prevY = sprite.y;
                         
                         // Update the spatial hash immediately
                         spriteMap.updatePosition(sprite, newPos.x, newPos.y);
                         
-                        // Set animation end time
-                        sprite.animationEndTime = now + interval;
+                        // Trigger animation with separate game and visual state
+                        triggerMoveAnimation(sprite, prevX, prevY, newPos.x, newPos.y, interval);
                         
                         break; // Only take the highest priority direction
                     }
@@ -786,9 +770,8 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
         }
     } else {
         // AI-controlled sprite
-        if (progress >= 1) {
-            // NPC has reached its visual target
-            
+        // Only process AI if no animation is currently running
+        if (now >= sprite.animationEndTime) {
             // Check if the NPC is in a rest state
             if (!sprite.restUntil || now >= sprite.restUntil) {
                 // Choose AI behavior based on sprite type
@@ -796,33 +779,34 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                 
                 if (sprite.isChampion) {
                     action = AI.updateChampionAI(
-                        sprite,
-                        findNearestEnemy,
-                        findNearestFortress,
-                        calculateNewPosition
+                        sprite, 
+                        findNearestEnemy, 
+                        calculateNewPosition,
+                        (x, y) => isPositionOccupied(x, y, sprite)
                     );
                 } else {
                     action = AI.updateRegularEnemyAI(
-                        sprite,
+                        sprite, 
                         findNearestEnemy,
-                        calculateNewPosition
+                        calculateNewPosition,
+                        (x, y) => isPositionOccupied(x, y, sprite)
                     );
                 }
                 
-                // Handle the action returned by AI
+                // Handle the action
                 handleAIAction(sprite, action, now, interval);
             }
         }
     }
-
-    // Return visual position for rendering only
+    
+    // Return visual position for rendering
     return {
         x: sprite.visualX,
         y: sprite.visualY
     };
 }
 
-// New function to handle AI actions
+// Handle AI actions with proper animation pattern
 function handleAIAction(sprite: Sprite, action: AIAction, now: number, interval: number) {
     switch (action.type) {
         case ActionType.MOVE:
@@ -844,29 +828,33 @@ function handleAIAction(sprite: Sprite, action: AIAction, now: number, interval:
                     for (const pos of alternativePositions) {
                         if (!isPositionOccupied(pos.x, pos.y, sprite) && 
                             !checkFactionCollision(sprite, pos.x, pos.y)) {
-                            // Save previous position for animation
-                            sprite.prev_x = sprite.x;
-                            sprite.prev_y = sprite.y;
+                            // Save previous position
+                            const prevX = sprite.x;
+                            const prevY = sprite.y;
                             
-                            // Update spatial hash
+                            // Update spatial hash with new logical position
                             spriteMap.updatePosition(sprite, pos.x, pos.y);
                             
-                            // Set animation timers
-                            sprite.animationEndTime = now + interval;
+                            // Trigger animation
+                            triggerMoveAnimation(sprite, prevX, prevY, pos.x, pos.y, interval);
+                            
+                            // Set rest period
                             sprite.restUntil = now + interval + sprite.movementDelay;
                             break;
                         }
                     }
                 } else if (!isPositionOccupied(action.targetX, action.targetY, sprite)) {
-                    // Save previous position for animation
-                    sprite.prev_x = sprite.x;
-                    sprite.prev_y = sprite.y;
+                    // Save previous position
+                    const prevX = sprite.x;
+                    const prevY = sprite.y;
                     
-                    // Update spatial hash
+                    // Update spatial hash with new logical position
                     spriteMap.updatePosition(sprite, action.targetX, action.targetY);
                     
-                    // Set animation timers
-                    sprite.animationEndTime = now + interval;
+                    // Trigger animation
+                    triggerMoveAnimation(sprite, prevX, prevY, action.targetX, action.targetY, interval);
+                    
+                    // Set rest period
                     sprite.restUntil = now + interval + sprite.movementDelay;
                 }
             }
@@ -875,7 +863,6 @@ function handleAIAction(sprite: Sprite, action: AIAction, now: number, interval:
         case ActionType.ATTACK:
             if (action.targetEntity) {
                 // Check if attacker's attack cooldown has elapsed
-                const now = Date.now();
                 const attackCooldown = sprite.isPlayer ? 
                     window.gameParams.playerAttackCooldown : 
                     window.gameParams.npcAttackCooldown;
@@ -893,6 +880,23 @@ function handleAIAction(sprite: Sprite, action: AIAction, now: number, interval:
             // Entity is idle, set a short rest period
             sprite.restUntil = now + sprite.movementDelay;
             break;
+    }
+}
+
+// Function to apply damage - now uses the animation system
+function applyDamage(attacker: Sprite, target: Sprite) {    
+    // Reduce hitpoints
+    target.hitpoints -= 1;
+    
+    // Trigger damage animation
+    triggerDamageAnimation(target, 1);
+    
+    console.log(`${target.faction} sprite took damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
+    
+    // Check if the sprite is defeated
+    if (target.hitpoints <= 0) {
+        // Pass the attacker to handleSpriteDefeat so it can move to target's position
+        handleSpriteDefeat(target, attacker);
     }
 }
 
@@ -1218,6 +1222,9 @@ function draw_frame(timestamp: number) {
                                camera_pos_x, camera_pos_y);
         }
     }
+
+    // Update animations
+    updateAnimations(now);
 
     const frameEndTime = performance.now();
     const frameDuration = frameEndTime - frameStartTime;

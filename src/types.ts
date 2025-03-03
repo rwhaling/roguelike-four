@@ -51,3 +51,47 @@ export interface AIAction {
     targetY?: number;
     targetEntity?: Entity;
 }
+
+// Animation-related types
+export enum AnimationState {
+    IDLE = 'IDLE',
+    MOVING = 'MOVING',
+    ATTACKING = 'ATTACKING',
+    TAKING_DAMAGE = 'TAKING_DAMAGE',
+    DYING = 'DYING'
+}
+
+export interface AnimationConfig {
+    duration: number;     // Duration in milliseconds
+    easing?: string;      // Easing function name (e.g., 'linear', 'easeInOut')
+    repeat?: boolean;     // Whether to repeat the animation
+    priority?: number;    // Priority for overlapping animations
+}
+
+export interface Animation {
+    id: string;           // Unique ID for this animation
+    state: AnimationState;
+    startTime: number;    // When the animation started
+    endTime: number;      // When the animation will end
+    target: Sprite;       // The sprite being animated
+    config: AnimationConfig;
+    
+    // For movement animations
+    fromPosition?: { x: number, y: number };
+    toPosition?: { x: number, y: number };
+    
+    // For damage animations
+    damageAmount?: number;
+    
+    // For death animations
+    removeAfterAnimation?: boolean;
+}
+
+// Queue to manage multiple animations
+export interface AnimationQueue {
+    activeAnimations: Animation[];
+    add(animation: Animation): void;
+    remove(animationId: string): void;
+    update(currentTime: number): void;
+    getActiveAnimation(spriteId: string): Animation | null;
+}
