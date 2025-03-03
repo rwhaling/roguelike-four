@@ -138,12 +138,19 @@ void main() {
       
       // Mix between off-black and aura color based on noise
       // No scaling now, using full [0,1] range for more extreme effect
+
+      vec4 noiseColor = offBlackAura;
+      if (noiseValue > 0.6) {
+        noiseColor = u_aura_color;
+      }
+
+      /*
       vec4 noiseColor = mix(
         offBlackAura,                  // Start with off-black
         u_aura_color * vec4(1.1, 1.1, 1.1, 0.85),  // Slightly brighter aura color
         noiseValue    // Full noise range for more dramatic effect
       );
-      
+      */
       // Replace only the off-black pixels with the mixed aura color
       outColor = noiseColor;
     }
