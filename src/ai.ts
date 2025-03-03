@@ -1,132 +1,108 @@
-// Simple AI module - extracts existing functions with minimal changes
+// Simple AI module - using declarative actions
 
-// Updated imports to use the new type definitions
-import { Entity, Sprite } from './types';
+import { Entity, AIAction, ActionType } from './types';
 
-// Function to update regular enemy AI
+// Function to update regular enemy AI - now returns an action
 export function updateRegularEnemyAI(
-    sprite: Sprite, 
-    now: number, 
-    interval: number,
-    spriteMap: any,
+    entity: Entity,
     findNearestEnemy: (entity: Entity) => Entity | null,
-    checkFactionCollision: (entity: Entity, x: number, y: number) => boolean,
-    isPositionOccupied: (x: number, y: number, excludeEntity: Entity | null) => boolean,
     calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number}
-) {
+): AIAction {
     // Find nearest enemy of opposing faction
-    const nearestEnemy = findNearestEnemy(sprite);
+    const nearestEnemy = findNearestEnemy(entity);
     
     if (nearestEnemy) {
+        // Check if we're adjacent to the enemy (for attack)
+        const distance = Math.abs(entity.x - nearestEnemy.x) + Math.abs(entity.y - nearestEnemy.y);
+        
+        if (distance <= 1) {
+            // We're adjacent, attack instead of move
+            return {
+                type: ActionType.ATTACK,
+                targetEntity: nearestEnemy
+            };
+        }
+        
         // Get direction toward enemy
         const direction = getDirectionTowardTarget(
-            sprite.x, sprite.y, 
+            entity.x, entity.y, 
             nearestEnemy.x, nearestEnemy.y
         );
         
-        // Apply the same bounds-checking logic as player movement
-        const newPos = calculateNewPosition(sprite.x, sprite.y, direction);
+        // Calculate desired position
+        const newPos = calculateNewPosition(entity.x, entity.y, direction);
         
-        // Check for faction collision before moving
-        if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-            // We hit an enemy, check alternate directions
-            tryAlternativeMovements(
-                sprite, direction, now, interval, 
-                spriteMap, calculateNewPosition, 
-                checkFactionCollision, isPositionOccupied
-            );
-        } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-            // Save previous position for animation
-            sprite.prev_x = sprite.x;
-            sprite.prev_y = sprite.y;
-            
-            // Update spatial hash immediately 
-            spriteMap.updatePosition(sprite, newPos.x, newPos.y);
-            
-            // Update animation end time
-            sprite.animationEndTime = now + interval;
-            sprite.restUntil = now + interval + sprite.movementDelay;
-        }
+        // Return move action
+        return {
+            type: ActionType.MOVE,
+            targetX: newPos.x,
+            targetY: newPos.y
+        };
     }
+    
+    // No enemies nearby, return idle action
+    return { type: ActionType.IDLE };
 }
 
 // Function to update champion AI (prioritizing fortresses)
 export function updateChampionAI(
-    sprite: Sprite, 
-    now: number, 
-    interval: number,
-    spriteMap: any,
+    entity: Entity,
     findNearestEnemy: (entity: Entity) => Entity | null,
     findNearestFortress: (entity: Entity, maxDistance: number) => Entity | null,
-    checkFactionCollision: (entity: Entity, x: number, y: number) => boolean,
-    isPositionOccupied: (x: number, y: number, excludeEntity: Entity | null) => boolean,
     calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number}
-) {
+): AIAction {
     // Champions first check for nearby fortresses
-    const nearbyFortress = findNearestFortress(sprite, 2);
+    const nearbyFortress = findNearestFortress(entity, 2);
     
     if (nearbyFortress) {
+        // Check if we're adjacent to the fortress
+        const distance = Math.abs(entity.x - nearbyFortress.x) + Math.abs(entity.y - nearbyFortress.y);
+        
+        if (distance <= 1) {
+            // We're adjacent, attack the fortress
+            return {
+                type: ActionType.ATTACK,
+                targetEntity: nearbyFortress
+            };
+        }
+        
         // Get direction toward fortress
         const direction = getDirectionTowardTarget(
-            sprite.x, sprite.y, 
+            entity.x, entity.y, 
             nearbyFortress.x, nearbyFortress.y
         );
         
-        // Apply the same bounds-checking logic as player movement
-        const newPos = calculateNewPosition(sprite.x, sprite.y, direction);
+        // Calculate desired position
+        const newPos = calculateNewPosition(entity.x, entity.y, direction);
         
-        // Check for faction collision before moving
-        if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-            // We hit an enemy, check alternate directions
-            tryAlternativeMovements(
-                sprite, direction, now, interval, 
-                spriteMap, calculateNewPosition, 
-                checkFactionCollision, isPositionOccupied
-            );
-        } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-            // Save previous position for animation
-            sprite.prev_x = sprite.x;
-            sprite.prev_y = sprite.y;
-            
-            // Update spatial hash immediately 
-            spriteMap.updatePosition(sprite, newPos.x, newPos.y);
-            
-            // Update animation end time
-            sprite.animationEndTime = now + interval;
-            sprite.restUntil = now + interval + sprite.movementDelay;
-        }
+        // Return move action
+        return {
+            type: ActionType.MOVE,
+            targetX: newPos.x,
+            targetY: newPos.y
+        };
     } else {
         // No fortress nearby, fall back to regular enemy behavior
-        updateRegularEnemyAI(
-            sprite, now, interval, spriteMap,
-            findNearestEnemy, checkFactionCollision, 
-            isPositionOccupied, calculateNewPosition
+        return updateRegularEnemyAI(
+            entity,
+            findNearestEnemy,
+            calculateNewPosition
         );
     }
 }
 
 // Function to update fortress AI (mostly passive)
-export function updateFortressAI(entity: Entity, now: number) {
-    // Fortresses don't move, but they could have logic for:
-    // - Periodic healing
-    // - Spawning nearby units
-    // - Alert status changes
-    
-    // Currently, fortresses have no active behavior
-    return;
+export function updateFortressAI(entity: Entity): AIAction {
+    // Fortresses don't take actions currently
+    return { type: ActionType.IDLE };
 }
 
-// Helper function to try alternative movement directions
-function tryAlternativeMovements(
-    sprite: Sprite, 
-    direction: {dx: number, dy: number}, 
-    now: number, 
-    interval: number,
-    spriteMap: any,
-    calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number},
-    checkFactionCollision: (entity: Entity, x: number, y: number) => boolean,
-    isPositionOccupied: (x: number, y: number, excludeEntity: Entity | null) => boolean
-) {
+// Get alternative movement options when primary direction is blocked
+export function getAlternativeMovements(
+    entity: Entity,
+    primaryDirection: {dx: number, dy: number},
+    calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number}
+): {x: number, y: number}[] {
     // Consider all 8 adjacent squares
     let adjacentDirections = [
         { dx: 1, dy: 0 },   // right
@@ -145,20 +121,8 @@ function tryAlternativeMovements(
         [adjacentDirections[i], adjacentDirections[j]] = [adjacentDirections[j], adjacentDirections[i]];
     }
     
-    for (const adjDir of adjacentDirections) {
-        const adjPos = calculateNewPosition(sprite.x, sprite.y, adjDir);
-        if (!isPositionOccupied(adjPos.x, adjPos.y, sprite) && 
-            !checkFactionCollision(sprite, adjPos.x, adjPos.y)) {
-            // Save previous position for animation
-            sprite.prev_x = sprite.x;
-            sprite.prev_y = sprite.y;
-            
-            spriteMap.updatePosition(sprite, adjPos.x, adjPos.y);
-            sprite.animationEndTime = now + interval;
-            sprite.restUntil = now + interval + sprite.movementDelay;
-            break;
-        }
-    }
+    // Return list of possible positions
+    return adjacentDirections.map(dir => calculateNewPosition(entity.x, entity.y, dir));
 }
 
 // Get direction toward target

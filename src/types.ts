@@ -36,3 +36,18 @@ export interface GameObject extends Entity, Visual {}
 
 // Keep Sprite as an alias for GameObject for backward compatibility
 export type Sprite = GameObject;
+
+// Define possible AI actions
+export enum ActionType {
+    MOVE = 'MOVE',
+    ATTACK = 'ATTACK',
+    IDLE = 'IDLE'
+}
+
+// Define the action interface returned by AI functions
+export interface AIAction {
+    type: ActionType;
+    targetX?: number;
+    targetY?: number;
+    targetEntity?: Entity;
+}

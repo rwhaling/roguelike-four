@@ -1,7 +1,7 @@
 import * as Crypto from "crypto-js";
 import { WebGLDisplay } from "./display/WebGLDisplay";
 import * as glu from "./display/GLUtils";
-import { Sprite, Entity, GameObject, Visual } from './types';
+import { Sprite, Entity, GameObject, Visual, AIAction, ActionType } from './types';
 import * as AI from './ai';
 
 // Add variables to track last respawn check times
@@ -375,7 +375,7 @@ function checkFactionCollision(entity: Entity, targetX: number, targetY: number)
 }
 
 // Function to apply damage to a sprite
-function applyDamage(attacker: Entity, target: Entity) {
+function applyDamage(attacker: Sprite, target: Sprite) {
     const now = Date.now();
     
     // Apply damage effect immediately (no cooldown on receiving damage)
@@ -398,7 +398,7 @@ function applyDamage(attacker: Entity, target: Entity) {
 let dyingSprites: Sprite[] = [];
 
 // Function to handle sprite defeat
-function handleSpriteDefeat(sprite: Sprite, attacker?: Entity) {
+function handleSpriteDefeat(sprite: Sprite, attacker?: Sprite) {
     console.log(`${sprite.faction} sprite was defeated!`);
     
     // Update champion counters if needed
@@ -736,7 +736,8 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // For structures, skip movement logic and just return current position
     if (sprite.isStructure) {
         // Call fortress AI function (even though they don't move)
-        AI.updateFortressAI(sprite, now);
+        const action = AI.updateFortressAI(sprite);
+        // We don't do anything with fortress actions currently
         return {
             x: sprite.x,
             y: sprite.y
@@ -791,20 +792,25 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
             // Check if the NPC is in a rest state
             if (!sprite.restUntil || now >= sprite.restUntil) {
                 // Choose AI behavior based on sprite type
+                let action;
+                
                 if (sprite.isChampion) {
-                    AI.updateChampionAI(
-                        sprite, now, interval, spriteMap,
-                        findNearestEnemy, findNearestFortress,
-                        checkFactionCollision, isPositionOccupied, 
+                    action = AI.updateChampionAI(
+                        sprite,
+                        findNearestEnemy,
+                        findNearestFortress,
                         calculateNewPosition
                     );
                 } else {
-                    AI.updateRegularEnemyAI(
-                        sprite, now, interval, spriteMap,
-                        findNearestEnemy, checkFactionCollision,
-                        isPositionOccupied, calculateNewPosition
+                    action = AI.updateRegularEnemyAI(
+                        sprite,
+                        findNearestEnemy,
+                        calculateNewPosition
                     );
                 }
+                
+                // Handle the action returned by AI
+                handleAIAction(sprite, action, now, interval);
             }
         }
     }
@@ -814,6 +820,80 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
         x: sprite.visualX,
         y: sprite.visualY
     };
+}
+
+// New function to handle AI actions
+function handleAIAction(sprite: Sprite, action: AIAction, now: number, interval: number) {
+    switch (action.type) {
+        case ActionType.MOVE:
+            // Ensure targetX and targetY are defined
+            if (action.targetX !== undefined && action.targetY !== undefined) {
+                // Check for faction collision before moving
+                if (checkFactionCollision(sprite, action.targetX, action.targetY)) {
+                    // Try alternative movements
+                    const direction = AI.getDirectionTowardTarget(
+                        sprite.x, sprite.y, 
+                        action.targetX, action.targetY
+                    );
+                    
+                    const alternativePositions = AI.getAlternativeMovements(
+                        sprite, direction, calculateNewPosition
+                    );
+                    
+                    // Try each alternative position
+                    for (const pos of alternativePositions) {
+                        if (!isPositionOccupied(pos.x, pos.y, sprite) && 
+                            !checkFactionCollision(sprite, pos.x, pos.y)) {
+                            // Save previous position for animation
+                            sprite.prev_x = sprite.x;
+                            sprite.prev_y = sprite.y;
+                            
+                            // Update spatial hash
+                            spriteMap.updatePosition(sprite, pos.x, pos.y);
+                            
+                            // Set animation timers
+                            sprite.animationEndTime = now + interval;
+                            sprite.restUntil = now + interval + sprite.movementDelay;
+                            break;
+                        }
+                    }
+                } else if (!isPositionOccupied(action.targetX, action.targetY, sprite)) {
+                    // Save previous position for animation
+                    sprite.prev_x = sprite.x;
+                    sprite.prev_y = sprite.y;
+                    
+                    // Update spatial hash
+                    spriteMap.updatePosition(sprite, action.targetX, action.targetY);
+                    
+                    // Set animation timers
+                    sprite.animationEndTime = now + interval;
+                    sprite.restUntil = now + interval + sprite.movementDelay;
+                }
+            }
+            break;
+            
+        case ActionType.ATTACK:
+            if (action.targetEntity) {
+                // Check if attacker's attack cooldown has elapsed
+                const now = Date.now();
+                const attackCooldown = sprite.isPlayer ? 
+                    window.gameParams.playerAttackCooldown : 
+                    window.gameParams.npcAttackCooldown;
+                    
+                if (!sprite.lastAttackTime || now - sprite.lastAttackTime >= attackCooldown) {
+                    // Apply damage to the target entity
+                    applyDamage(sprite, action.targetEntity);
+                    // Set attacker's last attack time
+                    sprite.lastAttackTime = now;
+                }
+            }
+            break;
+            
+        case ActionType.IDLE:
+            // Entity is idle, set a short rest period
+            sprite.restUntil = now + sprite.movementDelay;
+            break;
+    }
 }
 
 let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
