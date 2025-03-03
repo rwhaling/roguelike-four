@@ -20,9 +20,10 @@ Features::
 ## Building for distribution
 
 1. Run `pnpm build`
-2. mkdir package
-3. cp -r dist/ bg_edits_1.png fg_characters.png package
-4. manually edit index.html to use relative assets/ paths
+2. rm -rf dist
+3. cp -r bg_edits_1.png fg_characters.png dist
+4. zip -rXq aeon_shifters.zip dist
+
 ### Changing package managers
 
 Remove `pnpm-lock.yaml`, change/remove the `"packageManager"` field from `package.json`, and replace with a package manager of your choice (npm, yarn, bun, etc.)

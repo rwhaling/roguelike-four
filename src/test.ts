@@ -343,7 +343,7 @@ function isPositionOccupied(x: number, y: number, excludeSprite: any): boolean {
 }
 
 // Function to check for faction collision and apply damage effect
-function checkFactionCollision(entity: Entity, targetX: number, targetY: number): boolean {
+function checkFactionCollision(entity: Sprite, targetX: number, targetY: number): boolean {
     // Get sprites at the target position
     const spritesAtTarget = spriteMap.getSpritesAt(targetX, targetY);
     
@@ -405,7 +405,8 @@ function handleSpriteDefeat(sprite: Sprite, attacker: Sprite | null) {
         window.gameUI.currentScreen = "gameOver";
         window.gameUI.screenData = {
             message: "Game Over!",
-            score: calculateScore() 
+            score: calculateScore(),
+            playerFaction: window.gameUI.screenData.playerFaction // Preserve existing faction
         };
     } else {
         // Store the position of the defeated sprite before removing it
@@ -874,8 +875,8 @@ function handleAIAction(sprite: Sprite, action: AIAction, now: number, interval:
                     window.gameParams.npcAttackCooldown;
                     
                 if (!sprite.lastAttackTime || now - sprite.lastAttackTime >= attackCooldown) {
-                    // Apply damage to the target entity
-                    applyDamage(sprite, action.targetEntity);
+                    // Apply damage to the target entity - convert Entity to GameObject/Sprite
+                    applyDamage(sprite, action.targetEntity as GameObject);
                     // Set attacker's last attack time
                     sprite.lastAttackTime = now;
                 }
@@ -1281,25 +1282,33 @@ function resetSpritePositions(playerVisualFaction: string = "human", playerAllia
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
     
-    // Initialize orcs
+    // Initialize orcs - MODIFIED LOGIC
     const maxOrcCount = window.gameParams.maxOrcCount || 5;
-    if (allianceFaction !== "orc") {
-        for (let i = 0; i < maxOrcCount; i++) {
-            const npc = initializeSpritePosition(false, "orc");
-            if (npc) {
-                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
-            }
+    // If player is allied with orcs, spawn fewer orcs initially to help player
+    const initialOrcCount = allianceFaction === "orc" 
+        ? Math.ceil(maxOrcCount / 2) // Spawn half the max for allied faction
+        : maxOrcCount;               // Spawn full amount for enemy faction
+    
+    // Always spawn some orcs (both for allies and enemies)
+    for (let i = 0; i < initialOrcCount; i++) {
+        const npc = initializeSpritePosition(false, "orc");
+        if (npc) {
+            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
     
-    // Initialize undead
+    // Initialize undead - MODIFIED LOGIC
     const maxUndeadCount = window.gameParams.maxUndeadCount || 5;
-    if (allianceFaction !== "undead") {
-        for (let i = 0; i < maxUndeadCount; i++) {
-            const npc = initializeSpritePosition(false, "undead");
-            if (npc) {
-                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
-            }
+    // If player is allied with undead, spawn fewer undead initially to help player
+    const initialUndeadCount = allianceFaction === "undead" 
+        ? Math.ceil(maxUndeadCount / 2) // Spawn half the max for allied faction
+        : maxUndeadCount;               // Spawn full amount for enemy faction
+    
+    // Always spawn some undead (both for allies and enemies)
+    for (let i = 0; i < initialUndeadCount; i++) {
+        const npc = initializeSpritePosition(false, "undead");
+        if (npc) {
+            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
     
@@ -1342,7 +1351,7 @@ function initializePlayerWithAlliance(visualFaction: string, allianceFaction: st
     let spriteX = 12; // Human sprite x-coordinate in tileset
     let spriteY = 16; // Human sprite y-coordinate in tileset
     
-    // Create player sprite
+    // Create player sprite without the visualFaction property
     const player: Sprite = {
         x: x,
         y: y,
@@ -1356,8 +1365,6 @@ function initializePlayerWithAlliance(visualFaction: string, allianceFaction: st
         restUntil: 0,
         isPlayer: true,
         useBackgroundSpritesheet: false,
-        // Visual faction is "human", but alliance is with selected faction
-        visualFaction: visualFaction,
         faction: allianceFaction, // This determines combat behavior
         enemyFactions: allianceFaction === "orc" ? ["undead"] : ["orc"], // Enemies based on alliance
         maxHitpoints: 3,
@@ -1509,18 +1516,20 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
     
-    // Initialize orcs
+    // Initialize orcs - with REDUCED initial count since no alliance chosen yet
     const maxOrcCount = window.gameParams.maxOrcCount || 5;
-    for (let i = 0; i < maxOrcCount; i++) {
+    const initialOrcCount = Math.ceil(maxOrcCount / 2); // Only spawn half initially
+    for (let i = 0; i < initialOrcCount; i++) {
         const npc = initializeSpritePosition(false, "orc");
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
     
-    // Initialize undead
+    // Initialize undead - with REDUCED initial count since no alliance chosen yet
     const maxUndeadCount = window.gameParams.maxUndeadCount || 5;
-    for (let i = 0; i < maxUndeadCount; i++) {
+    const initialUndeadCount = Math.ceil(maxUndeadCount / 2); // Only spawn half initially
+    for (let i = 0; i < initialUndeadCount; i++) {
         const npc = initializeSpritePosition(false, "undead");
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);

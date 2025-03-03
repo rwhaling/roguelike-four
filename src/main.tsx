@@ -557,12 +557,12 @@ function FactionSelectScreen() {
   };
 
   // Styles for fortress sprites - using inline styles for compatibility
-  const fortressStyle = {
+  const fortressStyle: React.CSSProperties = {
     width: '16px',
     height: '16px',
     backgroundImage: 'url(bg_edits_1.png)',
     backgroundRepeat: 'no-repeat',
-    imageRendering: 'pixelated',
+    imageRendering: 'pixelated' as 'pixelated',
     backgroundSize: '256px 1536px', // Actual size of the spritesheet
     margin: '0 auto',
     transform: 'scale(4)'
