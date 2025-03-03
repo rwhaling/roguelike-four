@@ -468,7 +468,7 @@ function calculateScore() {
     return defeatedEnemies * 10; // 10 points per defeated enemy
 }
 
-// Add a global resetGame function that can be called from main.tsx
+// Update resetGame function to return to faction selection screen
 window.resetGame = function() {
     console.log("Resetting game after Game Over...");
     
@@ -477,10 +477,16 @@ window.resetGame = function() {
         sprite1.hitpoints = sprite1.maxHitpoints;
     }
     
-    // Optionally reset the entire game
-    resetSpritePositions();
+    // Switch to faction selection screen instead of restarting with same faction
+    window.gameUI.currentScreen = "factionSelect";
     
-    console.log("Game reset complete!");
+    // Clear player faction to force new selection
+    window.gameUI.screenData.playerFaction = null;
+    
+    // Note: The actual game state will be reset when startGameWithFaction is called
+    // after the player selects a faction
+    
+    console.log("Game reset complete - returning to faction select screen");
 };
 
 // Count NPCs by faction
@@ -884,19 +890,26 @@ function handleAIAction(sprite: Sprite, action: AIAction, now: number, interval:
 }
 
 // Function to apply damage - now uses the animation system
-function applyDamage(attacker: Sprite, target: Sprite) {    
+function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1) {    
     // Reduce hitpoints
-    target.hitpoints -= 1;
+    target.hitpoints -= amount;
     
     // Trigger damage animation
-    triggerDamageAnimation(target, 1);
+    triggerDamageAnimation(target, amount);
     
-    console.log(`${target.faction} sprite took damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
+    console.log(`${target.faction} sprite took ${amount} damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
     
     // Check if the sprite is defeated
     if (target.hitpoints <= 0) {
         // Pass the attacker to handleSpriteDefeat so it can move to target's position
         handleSpriteDefeat(target, attacker);
+    }
+
+    // Display appropriate message based on visualFaction vs faction
+    if (target.isPlayer) {
+        console.log(`Player (allied with ${target.faction}) took ${amount} damage from ${attacker.faction}!`);
+    } else if (attacker.isPlayer) {
+        console.log(`Player (allied with ${attacker.faction}) dealt ${amount} damage to ${target.faction}!`);
     }
 }
 
@@ -972,13 +985,12 @@ function initializeSpritePosition(isPlayer = false, faction = "human"): Sprite {
     // Define enemy factions based on this sprite's faction
     let enemyFactions: string[] = [];
     if (faction === "orc") {
-        enemyFactions = ["undead"];
+        enemyFactions = isPlayer ? ["undead"] : ["undead", "human"];
     } else if (faction === "undead") {
-        enemyFactions = ["orc"];
-    } else if (faction === "human" && isPlayer) {
-        enemyFactions = ["orc", "undead"]; // Player can attack both
+        enemyFactions = isPlayer ? ["orc"] : ["orc", "human"];
+    } else if (faction === "human") {
+        enemyFactions = isPlayer ? ["orc", "undead"] : []; // Player can attack both, NPCs are neutral
     }
-    // Regular humans don't attack anyone
     
     // Determine if this NPC should be a champion
     let isChampion = false;
@@ -1247,8 +1259,11 @@ function draw_frame(timestamp: number) {
 }
 
 // Modify resetSpritePositions to handle fortresses properly
-function resetSpritePositions() {
-    console.log("Resetting sprite positions...");
+function resetSpritePositions(playerVisualFaction: string = "human", playerAllianceFaction: string = null) {
+    console.log(`Resetting sprite positions with player visual faction: ${playerVisualFaction}, alliance: ${playerAllianceFaction}`);
+    
+    // Get the player's alliance faction from parameter or UI state
+    const allianceFaction = playerAllianceFaction || window.gameUI.screenData.playerFaction || "human";
     
     // Reset champion counters
     orcChampions = 0;
@@ -1260,27 +1275,31 @@ function resetSpritePositions() {
     fortresses = []; // Clear fortresses array
     dyingSprites = []; // Clear dying sprites too
     
-    // Re-initialize player sprite as human with 5 hitpoints
-    sprite1 = initializeSpritePosition(true, "human");
+    // Re-initialize player sprite with human visuals but proper alliance
+    sprite1 = initializePlayerWithAlliance(playerVisualFaction, allianceFaction);
     
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
     
     // Initialize orcs
     const maxOrcCount = window.gameParams.maxOrcCount || 5;
-    for (let i = 0; i < maxOrcCount; i++) {
-        const npc = initializeSpritePosition(false, "orc");
-        if (npc) {
-            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+    if (allianceFaction !== "orc") {
+        for (let i = 0; i < maxOrcCount; i++) {
+            const npc = initializeSpritePosition(false, "orc");
+            if (npc) {
+                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+            }
         }
     }
     
     // Initialize undead
     const maxUndeadCount = window.gameParams.maxUndeadCount || 5;
-    for (let i = 0; i < maxUndeadCount; i++) {
-        const npc = initializeSpritePosition(false, "undead");
-        if (npc) {
-            npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+    if (allianceFaction !== "undead") {
+        for (let i = 0; i < maxUndeadCount; i++) {
+            const npc = initializeSpritePosition(false, "undead");
+            if (npc) {
+                npc.movementDelay = 200 + Math.floor(Math.random() * 400);
+            }
         }
     }
     
@@ -1292,7 +1311,67 @@ function resetSpritePositions() {
     lastOrcRespawnCheck = Date.now();
     lastUndeadRespawnCheck = Date.now();
     
-    console.log(`Reset positions. Player: 1, Orcs: ${maxOrcCount}, Undead: ${maxUndeadCount}, Fortresses: ${fortresses.length}`);
+    console.log(`Reset complete. Player visual faction: ${playerVisualFaction}, alliance: ${allianceFaction}`);
+}
+
+// New function to initialize player with proper visual and alliance faction
+function initializePlayerWithAlliance(visualFaction: string, allianceFaction: string): Sprite {
+    // Find valid position for player
+    let x, y;
+    let attempts = 0;
+    const maxAttempts = 100;
+    
+    do {
+        if (allianceFaction === "orc") {
+            // Start near orc fortress area (upper-left quadrant)
+            x = 2 + Math.floor(Math.random() * (Math.floor(window.gameParams.mapWidth / 2) - 4));
+            y = 2 + Math.floor(Math.random() * (Math.floor(window.gameParams.mapHeight / 2) - 4));
+        } else if (allianceFaction === "undead") {
+            // Start near undead fortress area (bottom-right quadrant)
+            x = Math.floor(window.gameParams.mapWidth / 2) + 2 + Math.floor(Math.random() * (window.gameParams.mapWidth / 2 - 4));
+            y = Math.floor(window.gameParams.mapHeight / 2) + 2 + Math.floor(Math.random() * (window.gameParams.mapHeight / 2 - 4));
+        } else {
+            // Default random position for neutral/human
+            x = 2 + Math.floor(Math.random() * (window.gameParams.mapWidth - 4));
+            y = 2 + Math.floor(Math.random() * (window.gameParams.mapHeight - 4));
+        }
+        attempts++;
+    } while (isPositionOccupied(x, y, null) && attempts < maxAttempts);
+    
+    // Player sprite information (using human sprite)
+    let spriteX = 12; // Human sprite x-coordinate in tileset
+    let spriteY = 16; // Human sprite y-coordinate in tileset
+    
+    // Create player sprite
+    const player: Sprite = {
+        x: x,
+        y: y,
+        visualX: x,
+        visualY: y,
+        sprite_x: spriteX,
+        sprite_y: spriteY,
+        prev_x: x,
+        prev_y: y,
+        animationEndTime: 0,
+        restUntil: 0,
+        isPlayer: true,
+        useBackgroundSpritesheet: false,
+        // Visual faction is "human", but alliance is with selected faction
+        visualFaction: visualFaction,
+        faction: allianceFaction, // This determines combat behavior
+        enemyFactions: allianceFaction === "orc" ? ["undead"] : ["orc"], // Enemies based on alliance
+        maxHitpoints: 3,
+        hitpoints: 3,
+        lastMoveTime: 0,
+        movementDelay: 0,
+        isStructure: false,
+        isChampion: false
+    };
+    
+    // Add to spatial hash
+    spriteMap.add(player);
+    
+    return player;
 }
 
 // Function to get fortress at position (if any)
@@ -1545,10 +1624,12 @@ declare global {
       screenData: {
         message: string;
         score: number;
+        playerFaction: string | null;
         [key: string]: any;
       };
     };
     resetGame?: () => void; // Optional function provided by test.ts
+    startGameWithFaction?: (faction: string) => void; // New function for faction selection
   }
 }
 
@@ -1584,41 +1665,106 @@ function handleKeyUp(event: KeyboardEvent) {
     }
 }
 
-// Add a function to check for win/lose conditions
+// Update checkGameEndConditions to handle faction-based win/loss conditions
 function checkGameEndConditions() {
+    // Get player's faction from UI state
+    const playerFaction = window.gameUI.screenData.playerFaction || "human";
+    
     // Check if any fortress has been destroyed
     const orcFortress = fortresses.find(f => f.faction === "orc");
     const undeadFortress = fortresses.find(f => f.faction === "undead");
     
-    // Game over if player's (orc) fortress is destroyed
-    if (orcFortress && orcFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
-        console.log("Game over - Orc fortress destroyed!");
+    // Different win/loss conditions based on player faction
+    if (playerFaction === "orc") {
+        // Player is Orc - lose if Orc fortress destroyed, win if Undead fortress destroyed
+        if (orcFortress && orcFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log("Game over - Orc fortress destroyed!");
+            
+            // Set game over screen with appropriate message
+            window.gameUI.currentScreen = "gameOver";
+            window.gameUI.screenData = {
+                message: "Game Over! Your fortress was destroyed.",
+                score: calculateScore(),
+                playerFaction: playerFaction
+            };
+        }
         
-        // Calculate final score
-        const score = calculateScore();
+        // Victory if enemy fortress is destroyed
+        if (undeadFortress && undeadFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log("Victory - Undead fortress destroyed!");
+            
+            // Set win screen with appropriate message
+            window.gameUI.currentScreen = "gameOver";
+            window.gameUI.screenData = {
+                message: "You Win! The enemy fortress is destroyed.",
+                score: calculateScore(),
+                playerFaction: playerFaction
+            };
+        }
+    } else if (playerFaction === "undead") {
+        // Player is Undead - lose if Undead fortress destroyed, win if Orc fortress destroyed
+        if (undeadFortress && undeadFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log("Game over - Undead fortress destroyed!");
+            
+            // Set game over screen with appropriate message
+            window.gameUI.currentScreen = "gameOver";
+            window.gameUI.screenData = {
+                message: "Game Over! Your fortress was destroyed.",
+                score: calculateScore(),
+                playerFaction: playerFaction
+            };
+        }
         
-        // Set game over screen with appropriate message
-        window.gameUI.currentScreen = "gameOver";
-        window.gameUI.screenData = {
-            message: "Game Over! The orc fortress was destroyed.",
-            score: score
-        };
-    }
-    
-    // Victory if enemy (undead) fortress is destroyed
-    if (undeadFortress && undeadFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
-        console.log("Victory - Undead fortress destroyed!");
+        // Victory if enemy fortress is destroyed
+        if (orcFortress && orcFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log("Victory - Orc fortress destroyed!");
+            
+            // Set win screen with appropriate message
+            window.gameUI.currentScreen = "gameOver";
+            window.gameUI.screenData = {
+                message: "You Win! The enemy fortress is destroyed.",
+                score: calculateScore(),
+                playerFaction: playerFaction
+            };
+        }
+    } else {
+        // Original logic for human player (neutral)
+        if (orcFortress && orcFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log("Game over - Orc fortress destroyed!");
+            
+            // Set game over screen with appropriate message
+            window.gameUI.currentScreen = "gameOver";
+            window.gameUI.screenData = {
+                message: "Game Over! The orc fortress was destroyed.",
+                score: calculateScore(),
+                playerFaction: playerFaction
+            };
+        }
         
-        // Calculate final score
-        const score = calculateScore();
-        
-        // Set win screen with appropriate message
-        window.gameUI.currentScreen = "gameOver";
-        window.gameUI.screenData = {
-            message: "You Win! The undead fortress is destroyed.",
-            score: score
-        };
+        // Victory if enemy (undead) fortress is destroyed
+        if (undeadFortress && undeadFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log("Victory - Undead fortress destroyed!");
+            
+            // Set win screen with appropriate message
+            window.gameUI.currentScreen = "gameOver";
+            window.gameUI.screenData = {
+                message: "You Win! The undead fortress is destroyed.",
+                score: calculateScore(),
+                playerFaction: playerFaction
+            };
+        }
     }
 }
+
+// Add a function to handle starting the game with a selected faction
+window.startGameWithFaction = function(faction: string) {
+    console.log(`Starting game with player allied to faction: ${faction}`);
+    
+    // Store the player's alliance faction
+    window.gameUI.screenData.playerFaction = faction;
+    
+    // Reset game state, but always give player a human sprite
+    resetSpritePositions("human", faction);
+};
 
 

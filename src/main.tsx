@@ -24,10 +24,11 @@ window.gameParams = {
 
 // Create a separate UI state object to manage game screens
 window.gameUI = {
-  currentScreen: "playing", // "playing", "gameOver", "titleScreen", "shop"
+  currentScreen: "factionSelect", // Start with faction selection: "factionSelect", "playing", "gameOver"
   screenData: {
     message: "Game Over!",
     score: 0,
+    playerFaction: null, // Track which faction the player chooses
     // Other screen-specific data can be added here
   }
 };
@@ -55,13 +56,13 @@ function GameModals() {
   }, []);
 
   // Render different screens based on currentScreen value
+  if (currentScreen === "factionSelect") {
+    return <FactionSelectScreen />;
+  }
+  
   if (currentScreen === "gameOver") {
     return <GameOverScreen data={screenData} />;
   }
-  
-  // Add more screen components as needed
-  // if (currentScreen === "titleScreen") return <TitleScreen data={screenData} />;
-  // if (currentScreen === "shop") return <ShopScreen data={screenData} />;
   
   // Return null when playing (no modal)
   return null;
@@ -538,6 +539,78 @@ function GameParametersApp() {
   );
 }
 
+// New component for faction selection
+function FactionSelectScreen() {
+  const selectFaction = (faction) => {
+    // Store player's faction choice
+    window.gameUI.screenData.playerFaction = faction;
+    
+    // Switch to playing screen
+    window.gameUI.currentScreen = "playing";
+    
+    // Call function in test.ts to set up game with selected faction
+    if (typeof window.startGameWithFaction === "function") {
+      window.startGameWithFaction(faction);
+    } else {
+      console.error("startGameWithFaction function not found in test.ts");
+    }
+  };
+
+  // Styles for fortress sprites - using inline styles for compatibility
+  const fortressStyle = {
+    width: '16px',
+    height: '16px',
+    backgroundImage: 'url(bg_edits_1.png)',
+    backgroundRepeat: 'no-repeat',
+    imageRendering: 'pixelated',
+    backgroundSize: '256px 1536px', // Actual size of the spritesheet
+    margin: '0 auto',
+    transform: 'scale(4)'
+  };
+  
+  const orcFortressStyle = {
+    ...fortressStyle,
+    backgroundPosition: '-160px -336px' // 10,21 in a 16x16 grid
+  };
+  
+  const undeadFortressStyle = {
+    ...fortressStyle,
+    backgroundPosition: '-160px -352px' // 10,22 in a 16x16 grid
+  };
+
+  return (
+    <div className="game-modal faction-select">
+      <div className="modal-content">
+        <h2 className="text-4xl font-bold mb-6 text-center">Choose Your Faction</h2>
+        
+        <div className="flex justify-center gap-8">
+          <div 
+            className="faction-choice p-4 border-4 border-red-500 rounded-lg cursor-pointer hover:bg-red-100 transition-all"
+            onClick={() => selectFaction("orc")}
+          >
+            <h3 className="text-2xl font-bold text-red-700 mb-2">Orcs</h3>
+            <p className="mb-4">Red warrior faction with strong melee units.</p>
+            <div className="text-center p-4 bg-red-200 rounded flex justify-center items-center" style={{ minHeight: '100px' }}>
+              <div style={orcFortressStyle}></div>
+            </div>
+          </div>
+          
+          <div 
+            className="faction-choice p-4 border-4 border-blue-500 rounded-lg cursor-pointer hover:bg-blue-100 transition-all"
+            onClick={() => selectFaction("undead")}
+          >
+            <h3 className="text-2xl font-bold text-blue-700 mb-2">Undead</h3>
+            <p className="mb-4">Blue undead faction with necromantic powers.</p>
+            <div className="text-center p-4 bg-blue-200 rounded flex justify-center items-center" style={{ minHeight: '100px' }}>
+              <div style={undeadFortressStyle}></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Main App component to organize the UI structure
 function App() {
   return (
@@ -593,10 +666,12 @@ declare global {
       screenData: {
         message: string;
         score: number;
+        playerFaction: string | null;
         [key: string]: any;
       };
     };
     resetGame?: () => void; // Optional function provided by test.ts
+    startGameWithFaction?: (faction: string) => void; // New function for faction selection
   }
 }
 
