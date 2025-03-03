@@ -171,16 +171,18 @@ interface Sprite {
     sprite_x: number;
     sprite_y: number;
     
-    // Movement target
-    target_x: number;
-    target_y: number;
-    target_time: number;
+    // Previous position (for animation)
+    prev_x: number;
+    prev_y: number;
+    
+    // Animation timing
+    animationEndTime: number;
     
     restUntil: number;
     isPlayer: boolean;
     faction: string;
     
-    // NEW: Enemy factions this sprite will attack
+    // Enemy factions this sprite will attack
     enemyFactions: string[];
     
     // Damage effect properties
@@ -195,16 +197,16 @@ interface Sprite {
     lastMoveTime: number;
     movementDelay: number;
     
-    // NEW: Attack cooldown
+    // Attack cooldown
     lastAttackTime?: number;
     
-    // NEW: Structure flag for immobile objects like fortresses
+    // Structure flag for immobile objects like fortresses
     isStructure?: boolean;
     
-    // NEW: Flag to use background spritesheet for rendering
+    // Flag to use background spritesheet for rendering
     useBackgroundSpritesheet?: boolean;
     
-    // NEW: Champion flag and properties
+    // Champion flag and properties
     isChampion?: boolean;
 }
 
@@ -255,9 +257,9 @@ function spawnFortresses() {
         visualY: orcFortressY,
         sprite_x: 10,
         sprite_y: 21,
-        target_x: orcFortressX,
-        target_y: orcFortressY,
-        target_time: 0,
+        prev_x: orcFortressX,
+        prev_y: orcFortressY,
+        animationEndTime: 0,
         restUntil: 0,
         isPlayer: false,
         isStructure: true, // Mark as structure (immobile)
@@ -279,9 +281,9 @@ function spawnFortresses() {
         visualY: undeadFortressY,
         sprite_x: 10,
         sprite_y: 22,
-        target_x: undeadFortressX,
-        target_y: undeadFortressY,
-        target_time: 0,
+        prev_x: undeadFortressX,
+        prev_y: undeadFortressY,
+        animationEndTime: 0,
         restUntil: 0,
         isPlayer: false,
         isStructure: true, // Mark as structure (immobile)
@@ -310,7 +312,7 @@ function spawnFortresses() {
     console.log(`Total sprites after fortress spawning: ${allSprites.length}`);
 }
 
-// Spatial hash implementation
+// Simplified spatial hash implementation
 class SpatialHash {
     private grid: { [key: string]: Sprite[] } = {};
     
@@ -328,17 +330,6 @@ class SpatialHash {
         if (!this.grid[key].includes(sprite)) {
             this.grid[key].push(sprite);
         }
-        
-        // Also reserve target position if it's different
-        if (sprite.target_x !== sprite.x || sprite.target_y !== sprite.y) {
-            const targetKey = this.getKey(sprite.target_x, sprite.target_y);
-            if (!this.grid[targetKey]) {
-                this.grid[targetKey] = [];
-            }
-            if (!this.grid[targetKey].includes(sprite)) {
-                this.grid[targetKey].push(sprite);
-            }
-        }
     }
     
     // Remove a sprite from the spatial hash
@@ -350,56 +341,19 @@ class SpatialHash {
                 delete this.grid[key];
             }
         }
-        
-        // Also remove from target position if different
-        if (sprite.x !== sprite.target_x || sprite.y !== sprite.target_y) {
-            const targetKey = this.getKey(sprite.target_x, sprite.target_y);
-            if (this.grid[targetKey]) {
-                this.grid[targetKey] = this.grid[targetKey].filter(s => s !== sprite);
-                if (this.grid[targetKey].length === 0) {
-                    delete this.grid[targetKey];
-                }
-            }
-        }
     }
     
-    // COMPLETELY REWRITTEN UPDATE METHOD
-    update(sprite: Sprite, oldX: number, oldY: number, oldTargetX: number, oldTargetY: number): void {
-        // First, completely remove the sprite from all its old positions
-        const oldPositions = [
-            this.getKey(oldX, oldY),
-            this.getKey(oldTargetX, oldTargetY)
-        ];
+    // Update a sprite's position in the spatial hash
+    updatePosition(sprite: Sprite, newX: number, newY: number): void {
+        // Remove from old position
+        this.remove(sprite);
         
-        // Remove sprite from all old positions
-        for (const key of oldPositions) {
-            if (this.grid[key]) {
-                this.grid[key] = this.grid[key].filter(s => s !== sprite);
-                if (this.grid[key].length === 0) {
-                    delete this.grid[key];
-                }
-            }
-        }
+        // Update the sprite's position
+        sprite.x = newX;
+        sprite.y = newY;
         
-        // Then add sprite to all its new positions
-        const newKey = this.getKey(sprite.x, sprite.y);
-        if (!this.grid[newKey]) {
-            this.grid[newKey] = [];
-        }
-        if (!this.grid[newKey].includes(sprite)) {
-            this.grid[newKey].push(sprite);
-        }
-        
-        // Also add to target position if different
-        if (sprite.target_x !== sprite.x || sprite.target_y !== sprite.y) {
-            const targetKey = this.getKey(sprite.target_x, sprite.target_y);
-            if (!this.grid[targetKey]) {
-                this.grid[targetKey] = [];
-            }
-            if (!this.grid[targetKey].includes(sprite)) {
-                this.grid[targetKey].push(sprite);
-            }
-        }
+        // Add to new position
+        this.add(sprite);
     }
     
     // Check if a position is occupied
@@ -464,6 +418,10 @@ function checkFactionCollision(sprite: Sprite, targetX: number, targetY: number)
                 if (targetSprite.isStructure) {
                     console.log(`${sprite.faction} ${sprite.isChampion ? "champion" : "unit"} attacked ${targetSprite.faction} fortress!`);
                 }
+                
+                // Only return true (preventing movement) if the target wasn't killed
+                // If target was killed, the attacker will move into its space
+                return targetSprite.hitpoints > 0;
             }
             return true;
         }
@@ -487,7 +445,8 @@ function applyDamage(attacker: Sprite, target: Sprite) {
     
     // Check if the sprite is defeated
     if (target.hitpoints <= 0) {
-        handleSpriteDefeat(target);
+        // Pass the attacker to handleSpriteDefeat so it can move to target's position
+        handleSpriteDefeat(target, attacker);
     }
 }
 
@@ -495,7 +454,7 @@ function applyDamage(attacker: Sprite, target: Sprite) {
 let dyingSprites: Sprite[] = [];
 
 // Function to handle sprite defeat
-function handleSpriteDefeat(sprite: Sprite) {
+function handleSpriteDefeat(sprite: Sprite, attacker?: Sprite) {
     console.log(`${sprite.faction} sprite was defeated!`);
     
     // Update champion counters if needed
@@ -515,28 +474,44 @@ function handleSpriteDefeat(sprite: Sprite) {
         window.gameUI.currentScreen = "gameOver";
         window.gameUI.screenData = {
             message: "Game Over!",
-            score: calculateScore() // You'll need to implement this function
+            score: calculateScore() 
         };
         
         // We don't immediately restore player health now - that happens in resetGame
     } else {
-        // Instead of removing immediately, move to dyingSprites for animation
+        // Store the position of the defeated sprite before removing it
+        const defeatedX = sprite.x;
+        const defeatedY = sprite.y;
+        
+        // Remove from spatial hash immediately
+        spriteMap.remove(sprite);
+        
+        // Remove from the sprites array
         const index = allSprites.indexOf(sprite);
         if (index > -1) {
-            // Remove from spatial hash first
-            spriteMap.remove(sprite);
-            
-            // Remove from the sprites array
             allSprites.splice(index, 1);
             
-            // Make sure the damage effect shows
+            // Add to dying sprites array for animation only
             sprite.takingDamage = true;
-            sprite.damageUntil = Date.now() + 150; // Show damage for 500ms
-            
-            // Add to dying sprites array
+            sprite.damageUntil = Date.now() + 150;
             dyingSprites.push(sprite);
             
             console.log(`${sprite.faction} NPC removed from game. Remaining: ${countNpcsByFaction()[sprite.faction]}`);
+            
+            // If we have an attacker, immediately move them into the defeated sprite's position
+            if (attacker && !attacker.isStructure) {
+                console.log(`Moving ${attacker.faction} attacker to position (${defeatedX}, ${defeatedY})`);
+                
+                // Save previous position for animation
+                attacker.prev_x = attacker.x;
+                attacker.prev_y = attacker.y;
+                
+                // Update the spatial hash immediately
+                spriteMap.updatePosition(attacker, defeatedX, defeatedY);
+                
+                // Set animation end time
+                attacker.animationEndTime = Date.now() + window.gameParams.moveSpeed;
+            }
         }
     }
 }
@@ -650,9 +625,9 @@ function respawnNpcAdjacentToFortress(faction: string): Sprite | null {
                 visualY: pos.y,
                 sprite_x: selectedSprite[0],
                 sprite_y: selectedSprite[1],
-                target_x: pos.x,
-                target_y: pos.y,
-                target_time: 250,
+                prev_x: pos.x,
+                prev_y: pos.y,
+                animationEndTime: 250,
                 restUntil: 0,
                 isPlayer: false,
                 faction: faction,
@@ -813,14 +788,8 @@ function getDirectionTowardTarget(fromX: number, fromY: number, toX: number, toY
     return { dx, dy };
 }
 
-// Modify updateSpritePosition to include fallback movement for NPCs
+// Function to update player or NPC position
 function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
-    // Store old positions for spatial hash update
-    const oldX = sprite.x;
-    const oldY = sprite.y;
-    const oldTargetX = sprite.target_x;
-    const oldTargetY = sprite.target_y;
-    
     // Check if damage effect has expired
     if (sprite.takingDamage && sprite.damageUntil && now >= sprite.damageUntil) {
         sprite.takingDamage = false;
@@ -834,25 +803,18 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
         };
     }
     
-    let progress = 1 - ((sprite.target_time - now) / interval);
+    // Calculate animation progress
+    let progress = 1 - ((sprite.animationEndTime - now) / interval);
     if (progress > 1) progress = 1;
     if (progress < 0) progress = 0;
     
     // Calculate visual position for smooth animation
-    sprite.visualX = (sprite.x * (1 - progress)) + (sprite.target_x * progress);
-    sprite.visualY = (sprite.y * (1 - progress)) + (sprite.target_y * progress);
-    
-    // Whether we've moved and need to update the spatial hash
-    let hasMoved = false;
+    sprite.visualX = (sprite.prev_x * (1 - progress)) + (sprite.x * progress);
+    sprite.visualY = (sprite.prev_y * (1 - progress)) + (sprite.y * progress);
     
     // For player-controlled sprite, handle input
     if (sprite.isPlayer) {
-        // Player movement logic remains unchanged
         if (progress >= 1) {
-            // Player has reached target position - update logical position
-            sprite.x = sprite.target_x;
-            sprite.y = sprite.target_y;
-            
             // Check keys in priority order
             for (const key of MOVEMENT_PRIORITY) {
                 if (keyState[key]) {
@@ -860,33 +822,31 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     
                     // Check for faction collision before moving
                     if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-                        // We hit an enemy! Don't move into their space, but continue processing
+                        // We hit an enemy! Don't move into their space
                         continue;
                     }
                     
                     // Check for collision before moving
                     if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-                        // ANIMATION FIX: Only update target position, NOT logical position
-                        sprite.target_x = newPos.x;
-                        sprite.target_y = newPos.y;
+                        // Save previous position for animation
+                        sprite.prev_x = sprite.x;
+                        sprite.prev_y = sprite.y;
                         
-                        hasMoved = true;
+                        // Update the spatial hash immediately
+                        spriteMap.updatePosition(sprite, newPos.x, newPos.y);
+                        
+                        // Set animation end time
+                        sprite.animationEndTime = now + interval;
+                        
                         break; // Only take the highest priority direction
                     }
                 }
-            }
-            
-            // Only update target time if we actually moved
-            if (hasMoved) {
-                sprite.target_time = now + interval;
             }
         }
     } else {
         // AI-controlled sprite with ENEMY TARGETING behavior
         if (progress >= 1) {
-            // NPC has reached target position
-            sprite.x = sprite.target_x;
-            sprite.y = sprite.target_y;
+            // NPC has reached its visual target
             
             // Check if the NPC is in a rest state
             if (!sprite.restUntil || now >= sprite.restUntil) {
@@ -905,7 +865,7 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     
                     // Check for faction collision before moving
                     if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-                        // We hit an enemy! Don't move into their space, but try other directions
+                        // We hit an enemy, check alternate directions
                         // Try other directions toward the target in order of priority
                         const alternateDirections = [
                             { dx: direction.dx, dy: 0 },  // horizontal movement
@@ -918,101 +878,31 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                             const altPos = calculateNewPosition(sprite.x, sprite.y, altDir);
                             if (!isPositionOccupied(altPos.x, altPos.y, sprite) && 
                                 !checkFactionCollision(sprite, altPos.x, altPos.y)) {
-                                sprite.target_x = altPos.x;
-                                sprite.target_y = altPos.y;
-                                hasMoved = true;
+                                // Save previous position for animation
+                                sprite.prev_x = sprite.x;
+                                sprite.prev_y = sprite.y;
+                                
+                                spriteMap.updatePosition(sprite, altPos.x, altPos.y);
+                                sprite.animationEndTime = now + interval;
+                                sprite.restUntil = now + interval + sprite.movementDelay;
                                 break;
                             }
                         }
                     } else if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-                        // If path is clear, move directly toward enemy
-                        sprite.target_x = newPos.x;
-                        sprite.target_y = newPos.y;
-                        hasMoved = true;
+                        // Save previous position for animation
+                        sprite.prev_x = sprite.x;
+                        sprite.prev_y = sprite.y;
+                        
+                        // Update spatial hash immediately 
+                        spriteMap.updatePosition(sprite, newPos.x, newPos.y);
+                        
+                        // Update animation end time
+                        sprite.animationEndTime = now + interval;
+                        sprite.restUntil = now + interval + sprite.movementDelay;
                     }
-                    
-                    // NEW FALLBACK: If still couldn't move, check all 8 adjacent positions
-                    if (!hasMoved) {
-                        // All possible directions (8 directions including diagonals)
-                        const allDirections = [
-                            { dx: -1, dy: -1 }, // top-left
-                            { dx:  0, dy: -1 }, // top
-                            { dx:  1, dy: -1 }, // top-right
-                            { dx: -1, dy:  0 }, // left
-                            { dx:  1, dy:  0 }, // right
-                            { dx: -1, dy:  1 }, // bottom-left
-                            { dx:  0, dy:  1 }, // bottom
-                            { dx:  1, dy:  1 }  // bottom-right
-                        ];
-                        
-                        // Shuffle directions for randomness
-                        for (let i = allDirections.length - 1; i > 0; i--) {
-                            const j = Math.floor(Math.random() * (i + 1));
-                            [allDirections[i], allDirections[j]] = [allDirections[j], allDirections[i]];
-                        }
-                        
-                        // Try each direction
-                        for (const dir of allDirections) {
-                            const pos = calculateNewPosition(sprite.x, sprite.y, dir);
-                            if (!isPositionOccupied(pos.x, pos.y, sprite) && 
-                                !checkFactionCollision(sprite, pos.x, pos.y)) {
-                                // Found a valid move - take it
-                                sprite.target_x = pos.x;
-                                sprite.target_y = pos.y;
-                                hasMoved = true;
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    // No visible enemies, move randomly as before
-                    let attempts = 0;
-                    
-                    while (!hasMoved && attempts < 8) {
-                        // Generate random direction (-1, 0, or 1 for both x and y)
-                        const randomDirection = {
-                            dx: -1 + Math.floor(Math.random() * 3),
-                            dy: -1 + Math.floor(Math.random() * 3)
-                        };
-                        
-                        // Apply the same bounds-checking logic as player movement
-                        const newPos = calculateNewPosition(sprite.x, sprite.y, randomDirection);
-                        
-                        // Check for faction collision before moving
-                        if (checkFactionCollision(sprite, newPos.x, newPos.y)) {
-                            // We hit an enemy! Don't move into their space, but continue processing
-                            attempts++;
-                            continue;
-                        }
-                        
-                        // Check for collision before moving
-                        if (!isPositionOccupied(newPos.x, newPos.y, sprite)) {
-                            sprite.target_x = newPos.x;
-                            sprite.target_y = newPos.y;
-                            hasMoved = true;
-                        }
-                        
-                        attempts++;
-                    }
-                }
-                
-                // Update timing for this move
-                if (hasMoved) {
-                    sprite.target_time = now + interval;
-                    sprite.restUntil = now + interval + sprite.movementDelay;
-                } else {
-                    // If no valid move was found, try again later
-                    sprite.restUntil = now + 250;
                 }
             }
         }
-    }
-    
-    // Update spatial hash if any position changed
-    if (sprite.x !== oldX || sprite.y !== oldY || 
-        sprite.target_x !== oldTargetX || sprite.target_y !== oldTargetY) {
-        // Update the spatial hash with all old and new positions
-        spriteMap.update(sprite, oldX, oldY, oldTargetX, oldTargetY);
     }
 
     // Return visual position for rendering only
@@ -1129,9 +1019,9 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
         visualY: rand_y,
         sprite_x: selectedSprite[0],
         sprite_y: selectedSprite[1],
-        target_x: rand_x,
-        target_y: rand_y,
-        target_time: 250,
+        prev_x: rand_x,
+        prev_y: rand_y,
+        animationEndTime: 250,
         restUntil: 0,
         isPlayer: isPlayer,
         faction: faction,
