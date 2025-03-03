@@ -1,7 +1,7 @@
 // Simple AI module - extracts existing functions with minimal changes
 
-// We'll import the Sprite type from the main file to avoid duplicating it
-import { Sprite } from './types';
+// Updated imports to use the new type definitions
+import { Entity, Sprite } from './types';
 
 // Function to update regular enemy AI
 export function updateRegularEnemyAI(
@@ -9,9 +9,9 @@ export function updateRegularEnemyAI(
     now: number, 
     interval: number,
     spriteMap: any,
-    findNearestEnemy: (sprite: Sprite) => Sprite | null,
-    checkFactionCollision: (sprite: Sprite, x: number, y: number) => boolean,
-    isPositionOccupied: (x: number, y: number, excludeSprite: Sprite | null) => boolean,
+    findNearestEnemy: (entity: Entity) => Entity | null,
+    checkFactionCollision: (entity: Entity, x: number, y: number) => boolean,
+    isPositionOccupied: (x: number, y: number, excludeEntity: Entity | null) => boolean,
     calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number}
 ) {
     // Find nearest enemy of opposing faction
@@ -56,10 +56,10 @@ export function updateChampionAI(
     now: number, 
     interval: number,
     spriteMap: any,
-    findNearestEnemy: (sprite: Sprite) => Sprite | null,
-    findNearestFortress: (sprite: Sprite, maxDistance: number) => Sprite | null,
-    checkFactionCollision: (sprite: Sprite, x: number, y: number) => boolean,
-    isPositionOccupied: (x: number, y: number, excludeSprite: Sprite | null) => boolean,
+    findNearestEnemy: (entity: Entity) => Entity | null,
+    findNearestFortress: (entity: Entity, maxDistance: number) => Entity | null,
+    checkFactionCollision: (entity: Entity, x: number, y: number) => boolean,
+    isPositionOccupied: (x: number, y: number, excludeEntity: Entity | null) => boolean,
     calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number}
 ) {
     // Champions first check for nearby fortresses
@@ -106,7 +106,7 @@ export function updateChampionAI(
 }
 
 // Function to update fortress AI (mostly passive)
-export function updateFortressAI(sprite: Sprite, now: number) {
+export function updateFortressAI(entity: Entity, now: number) {
     // Fortresses don't move, but they could have logic for:
     // - Periodic healing
     // - Spawning nearby units
@@ -124,8 +124,8 @@ function tryAlternativeMovements(
     interval: number,
     spriteMap: any,
     calculateNewPosition: (x: number, y: number, direction: {dx: number, dy: number}) => {x: number, y: number},
-    checkFactionCollision: (sprite: Sprite, x: number, y: number) => boolean,
-    isPositionOccupied: (x: number, y: number, excludeSprite: Sprite | null) => boolean
+    checkFactionCollision: (entity: Entity, x: number, y: number) => boolean,
+    isPositionOccupied: (x: number, y: number, excludeEntity: Entity | null) => boolean
 ) {
     // Consider all 8 adjacent squares
     let adjacentDirections = [

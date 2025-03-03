@@ -1,16 +1,9 @@
 // Shared types
 
-export interface Sprite {
+// Gameplay and logic properties
+export interface Entity {
     x: number;
     y: number;
-    visualX: number;
-    visualY: number;
-    sprite_x: number;
-    sprite_y: number;
-    prev_x: number;
-    prev_y: number;
-    animationEndTime: number;
-    restUntil: number;
     isPlayer: boolean;
     faction: string;
     enemyFactions: string[];
@@ -20,8 +13,26 @@ export interface Sprite {
     movementDelay: number;
     lastAttackTime?: number;
     isStructure?: boolean;
-    useBackgroundSpritesheet?: boolean;
     isChampion?: boolean;
+}
+
+// Visual and animation properties
+export interface Visual {
+    visualX: number;
+    visualY: number;
+    sprite_x: number;
+    sprite_y: number;
+    prev_x: number;
+    prev_y: number;
+    animationEndTime: number;
+    restUntil: number;
+    useBackgroundSpritesheet?: boolean;
     takingDamage?: boolean;
     damageUntil?: number;
 }
+
+// Combined type that represents a game object with both entity and visual components
+export interface GameObject extends Entity, Visual {}
+
+// Keep Sprite as an alias for GameObject for backward compatibility
+export type Sprite = GameObject;

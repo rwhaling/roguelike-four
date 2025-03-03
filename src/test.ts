@@ -1,7 +1,7 @@
 import * as Crypto from "crypto-js";
 import { WebGLDisplay } from "./display/WebGLDisplay";
 import * as glu from "./display/GLUtils";
-import { Sprite } from './types';
+import { Sprite, Entity, GameObject, Visual } from './types';
 import * as AI from './ai';
 
 // Add variables to track last respawn check times
@@ -141,7 +141,7 @@ const DIRECTIONS = {
 const MOVEMENT_PRIORITY = ['q', 'e', 'z', 'c', 'w', 'a', 's', 'd'];
 
 // Function to calculate new position with boundary checks
-function calculateNewPosition(x, y, direction) {
+function calculateNewPosition(x: number, y: number, direction: {dx: number, dy: number}) {
     const { dx, dy } = direction;
     const MIN_X = 1;  // Keep the minimum at 1 to account for the border
     const MAX_X = window.gameParams.mapWidth - 2;  // Subtract 2 for borders (1 on each side)
@@ -336,31 +336,31 @@ function isPositionOccupied(x: number, y: number, excludeSprite: any): boolean {
 }
 
 // Function to check for faction collision and apply damage effect
-function checkFactionCollision(sprite: Sprite, targetX: number, targetY: number): boolean {
+function checkFactionCollision(entity: Entity, targetX: number, targetY: number): boolean {
     // Get sprites at the target position
     const spritesAtTarget = spriteMap.getSpritesAt(targetX, targetY);
     
     // If there are sprites and they're of a different faction, it's a collision
     for (const targetSprite of spritesAtTarget) {
-        if (targetSprite !== sprite && 
-            sprite.enemyFactions && 
-            sprite.enemyFactions.includes(targetSprite.faction)) {
+        if (targetSprite !== entity && 
+            entity.enemyFactions && 
+            entity.enemyFactions.includes(targetSprite.faction)) {
             
             // Check if attacker's attack cooldown has elapsed
             const now = Date.now();
-            const attackCooldown = sprite.isPlayer ? 
+            const attackCooldown = entity.isPlayer ? 
                 window.gameParams.playerAttackCooldown : 
                 window.gameParams.npcAttackCooldown;
                 
-            if (!sprite.lastAttackTime || now - sprite.lastAttackTime >= attackCooldown) {
+            if (!entity.lastAttackTime || now - entity.lastAttackTime >= attackCooldown) {
                 // Apply damage to the target sprite
-                applyDamage(sprite, targetSprite);
+                applyDamage(entity, targetSprite);
                 // Set attacker's last attack time
-                sprite.lastAttackTime = now;
+                entity.lastAttackTime = now;
                 
                 // Special message for fortress attacks
                 if (targetSprite.isStructure) {
-                    console.log(`${sprite.faction} ${sprite.isChampion ? "champion" : "unit"} attacked ${targetSprite.faction} fortress!`);
+                    console.log(`${entity.faction} ${entity.isChampion ? "champion" : "unit"} attacked ${targetSprite.faction} fortress!`);
                 }
                 
                 // Only return true (preventing movement) if the target wasn't killed
@@ -375,7 +375,7 @@ function checkFactionCollision(sprite: Sprite, targetX: number, targetY: number)
 }
 
 // Function to apply damage to a sprite
-function applyDamage(attacker: Sprite, target: Sprite) {
+function applyDamage(attacker: Entity, target: Entity) {
     const now = Date.now();
     
     // Apply damage effect immediately (no cooldown on receiving damage)
@@ -398,7 +398,7 @@ function applyDamage(attacker: Sprite, target: Sprite) {
 let dyingSprites: Sprite[] = [];
 
 // Function to handle sprite defeat
-function handleSpriteDefeat(sprite: Sprite, attacker?: Sprite) {
+function handleSpriteDefeat(sprite: Sprite, attacker?: Entity) {
     console.log(`${sprite.faction} sprite was defeated!`);
     
     // Update champion counters if needed
@@ -582,7 +582,9 @@ function respawnNpcAdjacentToFortress(faction: string): Sprite | null {
                 movementDelay: 200 + Math.floor(Math.random() * 400),
                 isStructure: false,
                 useBackgroundSpritesheet: false,
-                isChampion: isChampion
+                isChampion: isChampion,
+                takingDamage: false,
+                damageUntil: undefined
             };
             
             // Add sprite to spatial hash and sprites array
@@ -661,7 +663,7 @@ function displayPlayerHealth() {
 }
 
 // NEW: Function to find nearest fortress for champions
-function findNearestFortress(sprite: Sprite, maxDistance: number = 2): Sprite | null {
+function findNearestFortress(sprite: Entity, maxDistance: number = 2): Entity | null {
     if (!sprite.enemyFactions || sprite.enemyFactions.length === 0) {
         return null;
     }
@@ -669,7 +671,7 @@ function findNearestFortress(sprite: Sprite, maxDistance: number = 2): Sprite | 
     // Only look for fortresses of enemy factions
     const enemyFortresses = fortresses.filter(f => sprite.enemyFactions.includes(f.faction));
     
-    let nearestFortress: Sprite | null = null;
+    let nearestFortress: Entity | null = null;
     let shortestDistance = Infinity;
     
     for (const fortress of enemyFortresses) {
@@ -687,7 +689,7 @@ function findNearestFortress(sprite: Sprite, maxDistance: number = 2): Sprite | 
 }
 
 // Modify the findNearestEnemy function to make champions prioritize fortresses
-function findNearestEnemy(sprite: Sprite): Sprite | null {
+function findNearestEnemy(sprite: Entity): Entity | null {
     if (!sprite.enemyFactions || sprite.enemyFactions.length === 0) {
         return null;
     }
@@ -702,7 +704,7 @@ function findNearestEnemy(sprite: Sprite): Sprite | null {
     }
     
     // If no fortress is targeted (or not a champion), continue with normal enemy finding
-    let nearestEnemy: Sprite | null = null;
+    let nearestEnemy: Entity | null = null;
     let shortestDistance = Infinity;
     
     for (const otherSprite of allSprites) {
@@ -818,7 +820,7 @@ let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
 let orc_sprites = [[4,9],[6,9],[3,10],[5,10],[7,10],[4,11],[6,11]]
 let human_sprites = [[9,15],[11,15],[13,15],[8,16],[10,16],[12,16],[9,17],[11,17]]
 
-function initializeSpritePosition(isPlayer = false, faction = "human") {
+function initializeSpritePosition(isPlayer = false, faction = "human"): Sprite {
     let rand_x, rand_y;
     let isValidPosition = false;
     let attempts = 0;
@@ -914,7 +916,7 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
         }
     }
     
-    const sprite = {
+    const sprite: Sprite = {
         x: rand_x,
         y: rand_y,
         visualX: rand_x,
@@ -934,7 +936,9 @@ function initializeSpritePosition(isPlayer = false, faction = "human") {
         movementDelay: isPlayer ? 0 : 200 + Math.floor(Math.random() * 400),
         isStructure: false,
         useBackgroundSpritesheet: false,
-        isChampion: isChampion
+        isChampion: isChampion,
+        takingDamage: false,
+        damageUntil: undefined
     };
     
     // Add sprite to spatial hash
