@@ -129,7 +129,10 @@ let keyState = {
     q: false, // diagonal top-left
     e: false, // diagonal top-right
     z: false, // diagonal bottom-left
-    c: false  // diagonal bottom-right
+    c: false, // diagonal bottom-right
+    one: false,
+    two: false,
+    three: false
 };
 
 // Direction mapping for movement
@@ -800,6 +803,128 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     }
                 }
             }
+            if (keyState.one) {
+                console.log("TRIGGERING ATTACK ONE");
+                let nearestEnemy = findNearestEnemy(sprite);
+                if (nearestEnemy) {
+                    console.log("NEAREST ENEMY FOUND", nearestEnemy);
+
+                    let steps = getLinePoints(sprite.x, sprite.y, nearestEnemy.x, nearestEnemy.y).slice(1);
+
+                    for (const step of steps) {
+
+                        let randomParticleId = Math.floor(Math.random() * 1000000);
+
+                        let newParticle = {x: step.x, y: step.y, visualX: step.x, visualY: step.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
+                            colorSwapR: 0.0,
+                            colorSwapG: 1.0,
+                            colorSwapB: 0.0,
+                            colorSwapA: 1.0,
+                            particleId: randomParticleId
+                        };
+                    
+                        particles.push(newParticle);
+                        gsap.to(newParticle, {
+                            duration: 0.15,
+                            ease: "power2.inOut",
+                            repeat: 6,
+                            yoyo: true,
+                            colorSwapB: 1.0,
+                            onComplete: () => {
+                                console.log("animation complete?");
+                                particles = particles.filter(p => p.particleId !== randomParticleId);
+                            }
+                        });
+                    }                                
+                }
+            }
+            if (keyState.two) {
+                console.log("TRIGGERING ATTACK TWO");
+                let nearestEnemy = findNearestEnemy(sprite);
+                if (nearestEnemy) {
+                    console.log("NEAREST ENEMY FOUND", nearestEnemy);   
+                }
+                let explosionOffsets = [
+                    [0,-1],
+                    [-1,0],
+                    [0,1],
+                    [1,0],
+                    [-1,1],
+                    [-1,-1],
+                    [1,-1],
+                    [1,1],
+                    [2,0],
+                    [0,2],
+                    [-2,0],
+                    [0,-2]
+                ]
+                for (const offset of explosionOffsets) {
+                    let dist = Math.abs(offset[0]) + Math.abs(offset[1]);
+                    let randomParticleId = Math.floor(Math.random() * 1000000);
+                    let position = {x: sprite.x + offset[0], y: sprite.y + offset[1]}
+
+                    let newParticle = {x: position.x, y: position.y, visualX: position.x, visualY: position.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
+                        colorSwapR: 1.0,
+                        colorSwapG: 1.0,
+                        colorSwapB: 0.0,
+                        colorSwapA: 1.0,
+                        particleId: randomParticleId
+                    };
+                
+                    particles.push(newParticle);
+                    gsap.to(newParticle, {
+                        delay: (dist - 1) * 0.05,
+                        duration: 0.25,
+                        ease: "power2.inOut",
+                        repeat: 0,
+                        colorSwapG: 0.5,
+                        onComplete: () => {
+                            console.log("animation complete?");
+                            particles = particles.filter(p => p.particleId !== randomParticleId);
+                        }
+                    });                
+                }
+            }
+            if (keyState.three) {
+                console.log("TRIGGERING ATTACK THREE");
+                let nearestEnemy = findNearestEnemy(sprite);
+                if (nearestEnemy) {
+                    console.log("NEAREST ENEMY FOUND", nearestEnemy);
+                }
+
+                let steps = getLinePoints(sprite.x, sprite.y, nearestEnemy.x, nearestEnemy.y).slice(1);
+                let explosionOffsets = [
+                    [0,-1],
+                    [-1,0],
+                    [0,1],
+                    [1,0]
+                ]
+                let explosionSteps = explosionOffsets.map(offset => ({x: nearestEnemy.x + offset[0], y: nearestEnemy.y + offset[1]}));
+                let stepsAndOffsets = steps.concat(explosionSteps);
+                for (const step of stepsAndOffsets) {
+                    let dist = Math.abs(step.x - sprite.x) + Math.abs(step.y - sprite.y);
+                    let randomParticleId = Math.floor(Math.random() * 1000000);
+                    let newParticle = {x: step.x, y: step.y, visualX: step.x, visualY: step.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
+                        colorSwapR: 1.0,
+                        colorSwapG: 0.0,
+                        colorSwapB: 1.0,
+                        colorSwapA: 1.0,
+                        particleId: randomParticleId
+                    }
+                    particles.push(newParticle);
+                    gsap.to(newParticle, {
+                        delay: (dist - 1) * 0.05,
+                        duration: 0.35,
+                        ease: "power2.inOut",
+                        repeat: 0,
+                        colorSwapG: 0.5,
+                        onComplete: () => {
+                            console.log("animation complete?");
+                            particles = particles.filter(p => p.particleId !== randomParticleId);
+                        }
+                    });                
+                }
+            }
         }
     } else {
         // AI-controlled sprite
@@ -837,6 +962,60 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
         x: sprite.visualX,
         y: sprite.visualY
     };
+}
+
+/**
+ * Calculates all grid points along a line between two points using Bresenham's line algorithm.
+ * This is an efficient algorithm that determines which grid cells a straight line passes through.
+ * 
+ * @param x0 - Starting point x-coordinate
+ * @param y0 - Starting point y-coordinate
+ * @param x1 - Ending point x-coordinate
+ * @param y1 - Ending point y-coordinate
+ * @returns Array of {x, y} points representing grid cells the line passes through
+ */
+function getLinePoints(x0: number, y0: number, x1: number, y1: number) {
+    const points = [];
+    
+    // Calculate absolute distances in x and y directions
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    
+    // Determine step direction (positive or negative) for both axes
+    const sx = (x0 < x1) ? 1 : -1; // Step right if x1 > x0, step left otherwise
+    const sy = (y0 < y1) ? 1 : -1; // Step down if y1 > y0, step up otherwise
+    
+    // Initialize error value - this is used to determine when to step in the y direction
+    // The error represents the distance to the ideal line
+    let err = dx - dy;
+    
+    while (true) {
+        // Add current point to our results
+        points.push({x: x0, y: y0});
+        
+        // Exit condition: we've reached the end point
+        if (x0 === x1 && y0 === y1) break;
+        
+        // Calculate error value doubled (to avoid floating point arithmetic)
+        const e2 = 2 * err;
+        
+        // Determine whether to step in x direction
+        if (e2 > -dy) { // If error value indicates we're "above" the perfect line
+            err -= dy;   // Adjust error value to account for this step
+            x0 += sx;    // Step in appropriate x direction (left or right)
+        }
+        
+        // Determine whether to step in y direction
+        if (e2 < dx) { // If error value indicates we're "left" of the perfect line
+            err += dx;   // Adjust error value to account for this step
+            y0 += sy;    // Step in appropriate y direction (up or down)
+        }
+        
+        // Note: It's possible to step in both x and y in the same iteration
+        // This happens when the line is close to diagonal (45°)
+    }
+    
+    return points;
 }
 
 // Handle AI actions with proper animation pattern
@@ -1700,7 +1879,7 @@ declare global {
 // Add these functions to handle keyboard input
 function handleKeyDown(event: KeyboardEvent) {
     // Prevent default actions like scrolling with arrow keys
-    if (['w', 'a', 's', 'd', 'q', 'e', 'z', 'c'].includes(event.key.toLowerCase())) {
+    if (['w', 'a', 's', 'd', 'q', 'e', 'z', 'c', "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].includes(event.key.toLowerCase())) {
         event.preventDefault();
     }
     
@@ -1713,6 +1892,10 @@ function handleKeyDown(event: KeyboardEvent) {
         case 'e': keyState.e = true; break;
         case 'z': keyState.z = true; break;
         case 'c': keyState.c = true; break;
+        case '1': keyState.one = true; break;
+        case '2': keyState.two = true; break;
+        case '3': keyState.three = true; break;
+        
     }
 }
 
@@ -1726,6 +1909,9 @@ function handleKeyUp(event: KeyboardEvent) {
         case 'e': keyState.e = false; break;
         case 'z': keyState.z = false; break;
         case 'c': keyState.c = false; break;
+        case '1': keyState.one = false; break;
+        case '2': keyState.two = false; break;
+        case '3': keyState.three = false; break;
     }
 }
 
