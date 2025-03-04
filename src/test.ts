@@ -10,7 +10,7 @@ import {
     triggerDamageAnimation, 
     triggerDeathAnimation 
 } from './animation';
-
+import gsap from 'gsap';
 // Add variables to track last respawn check times
 let lastOrcRespawnCheck = Date.now();
 let lastUndeadRespawnCheck = Date.now();
@@ -383,6 +383,7 @@ function checkFactionCollision(entity: Sprite, targetX: number, targetY: number)
 
 // Add an array to track defeated sprites during their death animation
 let dyingSprites: Sprite[] = [];
+let particles: Particle[] = [];
 
 // Function to handle sprite defeat
 function handleSpriteDefeat(sprite: Sprite, attacker: Sprite | null) {
@@ -424,7 +425,32 @@ function handleSpriteDefeat(sprite: Sprite, attacker: Sprite | null) {
         
         // Add to dyingSprites array for death animation
         dyingSprites.push(dyingSpriteCopy);
+
+        // let randomParticleId = Math.floor(Math.random() * 1000000);
+
+        // let newParticle = {x: dyingSpriteCopy.x, y: dyingSpriteCopy.y, visualX: dyingSpriteCopy.x, visualY: dyingSpriteCopy.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
+        //     colorSwapR: 1.0,
+        //     colorSwapG: 0.0,
+        //     colorSwapB: 0.0,
+        //     colorSwapA: 1.0,
+        //     particleId: randomParticleId
+        // };
+
+        // particles.push(newParticle);
+        // gsap.to(newParticle, {
+        //     duration: 0.2,
+        //     ease: "power2.inOut",
+        //     repeat: 2,
+        //     yoyo: true,
+        //     colorSwapB: 1.0,
+        //     onComplete: () => {
+        //         console.log("animation complete?");
+        //         particles = particles.filter(p => p.particleId !== randomParticleId);
+        //     }
+        // });
+    
         
+
         // Trigger death animation on the original sprite
         // This isn't strictly necessary since we're removing it,
         // but we keep it for consistency with the animation system
@@ -897,7 +923,31 @@ function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1) {
     
     // Trigger damage animation
     triggerDamageAnimation(target, amount);
-    
+
+    let randomParticleId = Math.floor(Math.random() * 1000000);
+
+    let newParticle = {x: target.x, y: target.y, visualX: target.x, visualY: target.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
+        colorSwapR: 1.0,
+        colorSwapG: 0.0,
+        colorSwapB: 0.0,
+        colorSwapA: 1.0,
+        particleId: randomParticleId
+    };
+
+    particles.push(newParticle);
+    gsap.to(newParticle, {
+        duration: 0.2,
+        ease: "power2.inOut",
+        repeat: 2,
+        yoyo: true,
+        colorSwapB: 1.0,
+        onComplete: () => {
+            console.log("animation complete?");
+            particles = particles.filter(p => p.particleId !== randomParticleId);
+        }
+    });
+
+
     console.log(`${target.faction} sprite took ${amount} damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
     
     // Check if the sprite is defeated
@@ -1173,17 +1223,8 @@ function draw_frame(timestamp: number) {
                 camera_pos_x,
                 camera_pos_y,
                 true,
-                [0.0, 0.0, 1.0, 1.0]
+                [1.0, 0.0, 0.0, 1.0]
             );
-            // display.drawForeground(
-            //     1,  // sprite_x - damage sprite X position
-            //     3,  // sprite_y - damage sprite Y position
-            //     spritePos.x,
-            //     spritePos.y,
-            //     camera_pos_x,
-            //     camera_pos_y,
-            //     true // Use background tileset
-            // );
         }
         
         // If it's the player, optionally draw health indicators
@@ -1210,22 +1251,25 @@ function draw_frame(timestamp: number) {
             [0.0, 0.0, 0.0, 0.0] // No aura
         );
         
-        // Always draw the damage effect for dying sprites
-        display.drawParticle(
-            15,
-            0,
-            dyingSprite.x,
-            dyingSprite.y,
-            camera_pos_x,
-            camera_pos_y,
-            true,
-            [0.0, 0.0, 1.0, 1.0]
-        );
     
         // Remove from dyingSprites array when animation completes
         if (currentTime >= dyingSprite.damageUntil) {
             dyingSprites.splice(i, 1);
         }
+    }
+
+    for (let i =0; i < particles.length; i++) {
+        const particle = particles[i];
+        display.drawParticle(            
+            particle.sprite_x,
+            particle.sprite_y,
+            particle.visualX,
+            particle.visualY,
+            camera_pos_x,
+            camera_pos_y,
+            true,
+            [particle.colorSwapR, particle.colorSwapG, particle.colorSwapB, particle.colorSwapA]
+        )
     }
     
     // Use the lighting parameter - we'll add light sources for each NPC

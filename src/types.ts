@@ -31,6 +31,14 @@ export interface Visual {
     damageUntil?: number;
 }
 
+export interface Particle extends Visual {
+    particleId: number;
+    colorSwapR: number;
+    colorSwapG: number;
+    colorSwapB: number;
+    colorSwapA: number;
+}
+
 // Combined type that represents a game object with both entity and visual components
 export interface GameObject extends Entity, Visual {}
 
