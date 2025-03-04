@@ -29,7 +29,7 @@ function loadSpriteSheets() {
     let fgReqUrl = "fg_characters.png"; // New foreground sprite sheet
     
     // Second sprite sheet (background tiles)
-    let bgReqUrl = "bg_edits_1.png"; // New background sprite sheet
+    let bgReqUrl = "bg_edits_2.png"; // New background sprite sheet
     
     // Load foreground tileset first
     if (fgReqUrl.endsWith(".png")) {
@@ -1165,15 +1165,25 @@ function draw_frame(timestamp: number) {
         // If this sprite is taking damage, draw the damage effect from bg tileset
         if (sprite.takingDamage) {
             // Draw damage sprite (at position 1,3 in bg tileset)
-            display.drawForeground(
-                1,  // sprite_x - damage sprite X position
-                3,  // sprite_y - damage sprite Y position
+            display.drawParticle(
+                15,
+                0,
                 spritePos.x,
                 spritePos.y,
                 camera_pos_x,
                 camera_pos_y,
-                true // Use background tileset
+                true,
+                [0.0, 0.0, 1.0, 1.0]
             );
+            // display.drawForeground(
+            //     1,  // sprite_x - damage sprite X position
+            //     3,  // sprite_y - damage sprite Y position
+            //     spritePos.x,
+            //     spritePos.y,
+            //     camera_pos_x,
+            //     camera_pos_y,
+            //     true // Use background tileset
+            // );
         }
         
         // If it's the player, optionally draw health indicators
@@ -1201,16 +1211,17 @@ function draw_frame(timestamp: number) {
         );
         
         // Always draw the damage effect for dying sprites
-        display.drawForeground(
-            1,  // sprite_x - damage sprite X position 
-            3,  // sprite_y - damage sprite Y position
+        display.drawParticle(
+            15,
+            0,
             dyingSprite.x,
             dyingSprite.y,
             camera_pos_x,
             camera_pos_y,
-            true // Use background tileset
+            true,
+            [0.0, 0.0, 1.0, 1.0]
         );
-        
+    
         // Remove from dyingSprites array when animation completes
         if (currentTime >= dyingSprite.damageUntil) {
             dyingSprites.splice(i, 1);
@@ -1367,8 +1378,8 @@ function initializePlayerWithAlliance(visualFaction: string, allianceFaction: st
         useBackgroundSpritesheet: false,
         faction: allianceFaction, // This determines combat behavior
         enemyFactions: allianceFaction === "orc" ? ["undead"] : ["orc"], // Enemies based on alliance
-        maxHitpoints: 3,
-        hitpoints: 3,
+        maxHitpoints: 10,
+        hitpoints: 10,
         lastMoveTime: 0,
         movementDelay: 0,
         isStructure: false,
