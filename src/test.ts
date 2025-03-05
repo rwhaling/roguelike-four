@@ -1,7 +1,7 @@
 import * as Crypto from "crypto-js";
 import { WebGLDisplay } from "./display/WebGLDisplay";
 import * as glu from "./display/GLUtils";
-import { Sprite, Entity, GameObject, Visual, AIAction, ActionType } from './types';
+import { Sprite, Entity, GameObject, Visual, AIAction, ActionType, Particle } from './types';
 import * as AI from './ai';
 import { 
     animationManager, 
@@ -134,6 +134,8 @@ let keyState = {
     two: false,
     three: false
 };
+
+let keyPressed: string | null = null;
 
 // Direction mapping for movement
 const DIRECTIONS = {
@@ -386,6 +388,7 @@ function checkFactionCollision(entity: Sprite, targetX: number, targetY: number)
 
 // Add an array to track defeated sprites during their death animation
 let dyingSprites: Sprite[] = [];
+let damageParticles: Particle[] = [];
 let particles: Particle[] = [];
 
 // Function to handle sprite defeat
@@ -775,9 +778,14 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
     // For player-controlled sprite, handle input
     if (sprite.isPlayer) {
         // Only process input if no animation is currently running
+        if (particles.length > 0) {
+            return;
+        }
+
         if (now >= sprite.animationEndTime) {
             // Check keys in priority order
             for (const key of MOVEMENT_PRIORITY) {
+
                 if (keyState[key]) {
                     const newPos = calculateNewPosition(sprite.x, sprite.y, DIRECTIONS[key]);
                     
@@ -803,7 +811,7 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     }
                 }
             }
-            if (keyState.one) {
+            if (keyPressed === "1") {
                 console.log("TRIGGERING ATTACK ONE");
                 let nearestEnemy = findNearestEnemy(sprite);
                 if (nearestEnemy) {
@@ -855,7 +863,7 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     }                                
                 }
             }
-            if (keyState.two) {
+            if (keyPressed === "2") {
                 console.log("TRIGGERING ATTACK TWO");
                 let nearestEnemy = findNearestEnemy(sprite);
                 if (nearestEnemy) {
@@ -918,12 +926,15 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     });                
                 }
             }
-            if (keyState.three) {
+            if (keyPressed === "3") {
                 console.log("TRIGGERING ATTACK THREE");
                 let nearestEnemy = findNearestEnemy(sprite);
                 if (nearestEnemy) {
                     console.log("NEAREST ENEMY FOUND", nearestEnemy);
                 }
+
+                // Flag to mark this as an area attack (prevents movement to defeated enemies)
+                const isAreaAttack = true;
 
                 let steps = getLinePoints(sprite.x, sprite.y, nearestEnemy.x, nearestEnemy.y).slice(1);
                 let explosionOffsets = [
@@ -934,7 +945,20 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                 ]
                 let explosionSteps = explosionOffsets.map(offset => ({x: nearestEnemy.x + offset[0], y: nearestEnemy.y + offset[1]}));
                 let stepsAndOffsets = steps.concat(explosionSteps);
+                
                 for (const step of stepsAndOffsets) {
+                    // Check if any enemies are at this position and damage them
+                    const spritesAtPosition = spriteMap.getSpritesAt(step.x, step.y);
+                    for (const targetSprite of spritesAtPosition) {
+                        // Only apply damage to enemies (sprites of enemy factions)
+                        if (targetSprite !== sprite && 
+                            sprite.enemyFactions && 
+                            sprite.enemyFactions.includes(targetSprite.faction)) {
+                            // Apply 2 damage, pass isAreaAttack flag to prevent movement
+                            applyDamage(sprite, targetSprite, 2, isAreaAttack);
+                        }
+                    }
+                    
                     let dist = Math.abs(step.x - sprite.x) + Math.abs(step.y - sprite.y);
                     let randomParticleId = Math.floor(Math.random() * 1000000);
                     let newParticle = {x: step.x, y: step.y, visualX: step.x, visualY: step.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
@@ -958,15 +982,16 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     });                
                 }
             }
+            keyPressed = null;
         }
     } else {
         // AI-controlled sprite
         
         // This should only trigger on specials, but it also triggers for damage effects
         // disabling for now
-        // if (particles.length > 0) {
-        //     return;
-        // }
+        if (particles.length > 0) {
+            return;
+        }
 
         // Only process AI if no animation is currently running
         if (now >= sprite.animationEndTime) {
@@ -1153,16 +1178,16 @@ function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1, isAre
         particleId: randomParticleId
     };
 
-    particles.push(newParticle);
+    damageParticles.push(newParticle);
     gsap.to(newParticle, {
-        duration: 0.2,
-        ease: "power2.inOut",
-        repeat: 2,
+        duration: 0.30,
+        ease: "power1.inOut",
+        repeat: 0,
         yoyo: true,
         colorSwapB: 1.0,
         onComplete: () => {
             console.log("animation complete?");
-            particles = particles.filter(p => p.particleId !== randomParticleId);
+            damageParticles = damageParticles.filter(p => p.particleId !== randomParticleId);
         }
     });
 
@@ -1490,7 +1515,21 @@ function draw_frame(timestamp: number) {
             [particle.colorSwapR, particle.colorSwapG, particle.colorSwapB, particle.colorSwapA]
         )
     }
-    
+
+    for (let i =0; i < damageParticles.length; i++) {
+        const particle = damageParticles[i];
+        display.drawParticle(            
+            particle.sprite_x,
+            particle.sprite_y,
+            particle.visualX,
+            particle.visualY,
+            camera_pos_x,
+            camera_pos_y,
+            true,
+            [particle.colorSwapR, particle.colorSwapG, particle.colorSwapB, particle.colorSwapA]
+        )
+    }
+
     // Use the lighting parameter - we'll add light sources for each NPC
     if (window.gameParams.lightingEnabled) {
         // First call with player position
@@ -1924,17 +1963,17 @@ function handleKeyDown(event: KeyboardEvent) {
     }
     
     switch (event.key.toLowerCase()) {
-        case 'w': keyState.w = true; break;
-        case 'a': keyState.a = true; break;
-        case 's': keyState.s = true; break;
-        case 'd': keyState.d = true; break;
-        case 'q': keyState.q = true; break;
-        case 'e': keyState.e = true; break;
-        case 'z': keyState.z = true; break;
-        case 'c': keyState.c = true; break;
-        case '1': keyState.one = true; break;
-        case '2': keyState.two = true; break;
-        case '3': keyState.three = true; break;
+        case 'w': keyState.w = true; keyPressed = "w"; break;
+        case 'a': keyState.a = true; keyPressed = "a"; break;
+        case 's': keyState.s = true; keyPressed = "s"; break;
+        case 'd': keyState.d = true; keyPressed = "d"; break;
+        case 'q': keyState.q = true; keyPressed = "q"; break;
+        case 'e': keyState.e = true; keyPressed = "e"; break;
+        case 'z': keyState.z = true; keyPressed = "z"; break;
+        case 'c': keyState.c = true; keyPressed = "c"; break;
+        case '1': keyState.one = true; keyPressed = "1"; break;
+        case '2': keyState.two = true; keyPressed = "2"; break;
+        case '3': keyState.three = true; keyPressed = "3"; break;
         
     }
 }
