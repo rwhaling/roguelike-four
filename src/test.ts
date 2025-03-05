@@ -809,16 +809,33 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                 if (nearestEnemy) {
                     console.log("NEAREST ENEMY FOUND", nearestEnemy);
 
+                    // Get all points in a line to the enemy
                     let steps = getLinePoints(sprite.x, sprite.y, nearestEnemy.x, nearestEnemy.y).slice(1);
 
+                    // Flag to mark this as an area attack (prevents movement to defeated enemies)
+                    const isAreaAttack = true;
+                    
+                    // Check for enemies along the line and damage them
                     for (const step of steps) {
+                        // Check if any enemies are at this position and damage them
+                        const spritesAtPosition = spriteMap.getSpritesAt(step.x, step.y);
+                        for (const targetSprite of spritesAtPosition) {
+                            // Only apply damage to enemies (sprites of enemy factions)
+                            if (targetSprite !== sprite && 
+                                sprite.enemyFactions && 
+                                sprite.enemyFactions.includes(targetSprite.faction)) {
+                                // Apply 2 damage, pass isAreaAttack flag to prevent movement
+                                applyDamage(sprite, targetSprite, 2, isAreaAttack);
+                            }
+                        }
 
+                        // Create visual particle effect
                         let randomParticleId = Math.floor(Math.random() * 1000000);
 
                         let newParticle = {x: step.x, y: step.y, visualX: step.x, visualY: step.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
                             colorSwapR: 0.0,
                             colorSwapG: 1.0,
-                            colorSwapB: 0.0,
+                            colorSwapB: 1.0,
                             colorSwapA: 1.0,
                             particleId: randomParticleId
                         };
@@ -826,10 +843,10 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                         particles.push(newParticle);
                         gsap.to(newParticle, {
                             duration: 0.15,
-                            ease: "power2.inOut",
-                            repeat: 6,
+                            ease: "power1.in",
+                            repeat: 0,
                             yoyo: true,
-                            colorSwapB: 1.0,
+                            colorSwapG: 0.0,
                             onComplete: () => {
                                 console.log("animation complete?");
                                 particles = particles.filter(p => p.particleId !== randomParticleId);
@@ -858,10 +875,26 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     [-2,0],
                     [0,-2]
                 ]
+                
+                // Flag to mark this as an area attack (prevents movement to defeated enemies)
+                const isAreaAttack = true;
+                
                 for (const offset of explosionOffsets) {
                     let dist = Math.abs(offset[0]) + Math.abs(offset[1]);
                     let randomParticleId = Math.floor(Math.random() * 1000000);
                     let position = {x: sprite.x + offset[0], y: sprite.y + offset[1]}
+                    
+                    // Check if any enemies are at this position and damage them
+                    const spritesAtPosition = spriteMap.getSpritesAt(position.x, position.y);
+                    for (const targetSprite of spritesAtPosition) {
+                        // Only apply damage to enemies (sprites of enemy factions)
+                        if (targetSprite !== sprite && 
+                            sprite.enemyFactions && 
+                            sprite.enemyFactions.includes(targetSprite.faction)) {
+                            // Apply 2 damage, pass isAreaAttack flag to prevent movement
+                            applyDamage(sprite, targetSprite, 2, isAreaAttack);
+                        }
+                    }
 
                     let newParticle = {x: position.x, y: position.y, visualX: position.x, visualY: position.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
                         colorSwapR: 1.0,
@@ -873,8 +906,8 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                 
                     particles.push(newParticle);
                     gsap.to(newParticle, {
-                        delay: (dist - 1) * 0.05,
-                        duration: 0.25,
+                        delay: 0,
+                        duration: 0.15 + (dist - 1) * 0.05,
                         ease: "power2.inOut",
                         repeat: 0,
                         colorSwapG: 0.5,
@@ -913,9 +946,9 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                     }
                     particles.push(newParticle);
                     gsap.to(newParticle, {
-                        delay: (dist - 1) * 0.05,
-                        duration: 0.35,
-                        ease: "power2.inOut",
+                        delay: (dist - 1) * 0.01,
+                        duration: 0.15 + (dist - 1) * 0.02,
+                        ease: "power2.out",
                         repeat: 0,
                         colorSwapG: 0.5,
                         onComplete: () => {
@@ -928,6 +961,13 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
         }
     } else {
         // AI-controlled sprite
+        
+        // This should only trigger on specials, but it also triggers for damage effects
+        // disabling for now
+        // if (particles.length > 0) {
+        //     return;
+        // }
+
         // Only process AI if no animation is currently running
         if (now >= sprite.animationEndTime) {
             // Check if the NPC is in a rest state
@@ -1096,7 +1136,7 @@ function handleAIAction(sprite: Sprite, action: AIAction, now: number, interval:
 }
 
 // Function to apply damage - now uses the animation system
-function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1) {    
+function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1, isAreaAttack: boolean = false) {    
     // Reduce hitpoints
     target.hitpoints -= amount;
     
@@ -1131,8 +1171,8 @@ function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1) {
     
     // Check if the sprite is defeated
     if (target.hitpoints <= 0) {
-        // Pass the attacker to handleSpriteDefeat so it can move to target's position
-        handleSpriteDefeat(target, attacker);
+        // For area attacks, don't pass the attacker to prevent movement
+        handleSpriteDefeat(target, isAreaAttack ? null : attacker);
     }
 
     // Display appropriate message based on visualFaction vs faction
