@@ -133,6 +133,7 @@ function GameParametersApp() {
       renderTime: "N/A",
       fps: "N/A",
       playerHealth: "N/A",
+      playerStamina: "N/A",
       orcCount: "N/A",
       undeadCount: "N/A",
       orcFortress: "N/A",
@@ -154,6 +155,10 @@ function GameParametersApp() {
     // Extract player health
     const healthMatch = statsString.match(/Health: (\d+)\/(\d+)/);
     if (healthMatch) stats.playerHealth = `${healthMatch[1]}/${healthMatch[2]}`;
+    
+    // Extract player stamina
+    const staminaMatch = statsString.match(/Stamina: (\d+)\/(\d+)/);
+    if (staminaMatch) stats.playerStamina = `${staminaMatch[1]}/${staminaMatch[2]}`;
     
     // Extract faction counts
     const orcMatch = statsString.match(/Orcs: (\d+)\/(\d+)/);
@@ -212,16 +217,24 @@ function GameParametersApp() {
             </div>
           </div>
           
-          {/* Player stats */}
+          {/* Player stats - MODIFIED TO SINGLE ROW */}
           <div className="col-span-2 md:col-span-1">
             <h4 className="font-medium text-sm text-gray-600 mb-2">Player</h4>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-2">
               <div className="text-sm text-gray-700">Health:</div>
               <input 
                 type="text" 
                 readOnly 
                 value={stats.playerHealth} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 w-16" 
+              />
+              
+              <div className="text-sm text-gray-700 ml-3">Stamina:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.playerStamina} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 w-16" 
               />
             </div>
           </div>

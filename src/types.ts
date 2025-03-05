@@ -14,6 +14,14 @@ export interface Entity {
     lastAttackTime?: number;
     isStructure?: boolean;
     isChampion?: boolean;
+    maxStamina: number;
+    stamina: number;
+    healthRegenFrequency?: number;
+    healthRegenTimeElapsed?: number;
+    healthRegenAmount?: number;
+    staminaRegenFrequency?: number;
+    staminaRegenTimeElapsed?: number;
+    staminaRegenAmount?: number;
 }
 
 // Visual and animation properties

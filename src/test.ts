@@ -223,6 +223,8 @@ function spawnFortresses() {
         enemyFactions: ["undead", "human"], // Enemies of the orc faction
         maxHitpoints: 20, // Fortresses have more hitpoints
         hitpoints: 20,
+        maxStamina: 0,
+        stamina: 0,
         lastMoveTime: 0,
         movementDelay: 0,
         useBackgroundSpritesheet: true, // Use background spritesheet
@@ -247,6 +249,8 @@ function spawnFortresses() {
         enemyFactions: ["orc", "human"], // Enemies of the undead faction
         maxHitpoints: 20, // Fortresses have more hitpoints
         hitpoints: 20,
+        maxStamina: 0,
+        stamina: 0,
         lastMoveTime: 0,
         movementDelay: 0,
         useBackgroundSpritesheet: true, // Use background spritesheet
@@ -614,6 +618,8 @@ function respawnNpcAdjacentToFortress(faction: string): Sprite | null {
                 enemyFactions: faction === "orc" ? ["undead"] : ["orc"],
                 maxHitpoints: isChampion ? 5 : 1,
                 hitpoints: isChampion ? 5 : 1,
+                maxStamina: isChampion ? 2 : 0,
+                stamina: isChampion ? 2 : 0,        
                 lastMoveTime: Date.now(),
                 movementDelay: 200 + Math.floor(Math.random() * 400),
                 isStructure: false,
@@ -674,19 +680,19 @@ function checkRespawns(now: number) {
     }
 }
 
-// Update the displayPlayerHealth function to show max champions from parameters
+// Update the displayPlayerHealth function to include stamina
 function displayPlayerHealth() {
     let statsText = "";
     
     if (sprite1) {
-        // Add player health info
-        statsText += `Health: ${sprite1.hitpoints}/${sprite1.maxHitpoints}`;
+        // Add player health and stamina info
+        statsText += `Health: ${sprite1.hitpoints}/${sprite1.maxHitpoints} | Stamina: ${sprite1.stamina}/${sprite1.maxStamina}`;
         
         // Add faction counts to stats
         const counts = countNpcsByFaction();
         statsText += ` | Orcs: ${counts.orc}/${window.gameParams.maxOrcCount} | Undead: ${counts.undead}/${window.gameParams.maxUndeadCount}`;
         
-        // Add champion counts to stats with max from parameters
+        // Add champion counts to stats with max from parameters (using existing global variables)
         statsText += ` | Champions: Orc ${orcChampions}/${window.gameParams.maxOrcChampions}, Undead ${undeadChampions}/${window.gameParams.maxUndeadChampions}`;
         
         // Add fortress positions and health
@@ -813,18 +819,161 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
             }
             if (keyPressed === "1") {
                 console.log("TRIGGERING ATTACK ONE");
-                let nearestEnemy = findNearestEnemy(sprite);
-                if (nearestEnemy) {
-                    console.log("NEAREST ENEMY FOUND", nearestEnemy);
+                // Check if player has enough stamina
+                if (sprite.stamina >= 2) {
+                    // Reduce stamina cost
+                    sprite.stamina -= 2;
+                    
+                    let nearestEnemy = findNearestEnemy(sprite);
+                    if (nearestEnemy) {
+                        console.log("NEAREST ENEMY FOUND", nearestEnemy);
 
-                    // Get all points in a line to the enemy
-                    let steps = getLinePoints(sprite.x, sprite.y, nearestEnemy.x, nearestEnemy.y).slice(1);
+                        // Get all points in a line to the enemy
+                        let steps = getLinePoints(sprite.x, sprite.y, nearestEnemy.x, nearestEnemy.y).slice(1);
 
+                        // Flag to mark this as an area attack (prevents movement to defeated enemies)
+                        const isAreaAttack = true;
+                        
+                        // Check for enemies along the line and damage them
+                        for (const step of steps) {
+                            // Check if any enemies are at this position and damage them
+                            const spritesAtPosition = spriteMap.getSpritesAt(step.x, step.y);
+                            for (const targetSprite of spritesAtPosition) {
+                                // Only apply damage to enemies (sprites of enemy factions)
+                                if (targetSprite !== sprite && 
+                                    sprite.enemyFactions && 
+                                    sprite.enemyFactions.includes(targetSprite.faction)) {
+                                    // Apply 2 damage, pass isAreaAttack flag to prevent movement
+                                    applyDamage(sprite, targetSprite, 2, isAreaAttack);
+                                }
+                            }
+
+                            // Create visual particle effect
+                            let randomParticleId = Math.floor(Math.random() * 1000000);
+
+                            let newParticle = {x: step.x, y: step.y, visualX: step.x, visualY: step.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
+                                colorSwapR: 0.0,
+                                colorSwapG: 1.0,
+                                colorSwapB: 1.0,
+                                colorSwapA: 1.0,
+                                particleId: randomParticleId
+                            };
+                        
+                            particles.push(newParticle);
+                            gsap.to(newParticle, {
+                                duration: 0.15,
+                                ease: "power1.in",
+                                repeat: 0,
+                                yoyo: true,
+                                colorSwapG: 0.0,
+                                onComplete: () => {
+                                    console.log("animation complete?");
+                                    particles = particles.filter(p => p.particleId !== randomParticleId);
+                                }
+                            });
+                        }                                
+                    }
+                } else {
+                    console.log("Not enough stamina for special attack! Need 2 stamina.");
+                }
+            }
+            if (keyPressed === "2") {
+                console.log("TRIGGERING ATTACK TWO");
+                // Check if player has enough stamina
+                if (sprite.stamina >= 2) {
+                    // Reduce stamina cost
+                    sprite.stamina -= 2;
+                    
+                    let nearestEnemy = findNearestEnemy(sprite);
+                    if (nearestEnemy) {
+                        console.log("NEAREST ENEMY FOUND", nearestEnemy);   
+                    }
+                    let explosionOffsets = [
+                        [0,-1],
+                        [-1,0],
+                        [0,1],
+                        [1,0],
+                        [-1,1],
+                        [-1,-1],
+                        [1,-1],
+                        [1,1],
+                        [2,0],
+                        [0,2],
+                        [-2,0],
+                        [0,-2]
+                    ]
+                    
                     // Flag to mark this as an area attack (prevents movement to defeated enemies)
                     const isAreaAttack = true;
                     
-                    // Check for enemies along the line and damage them
-                    for (const step of steps) {
+                    for (const offset of explosionOffsets) {
+                        let dist = Math.abs(offset[0]) + Math.abs(offset[1]);
+                        let randomParticleId = Math.floor(Math.random() * 1000000);
+                        let position = {x: sprite.x + offset[0], y: sprite.y + offset[1]}
+                        
+                        // Check if any enemies are at this position and damage them
+                        const spritesAtPosition = spriteMap.getSpritesAt(position.x, position.y);
+                        for (const targetSprite of spritesAtPosition) {
+                            // Only apply damage to enemies (sprites of enemy factions)
+                            if (targetSprite !== sprite && 
+                                sprite.enemyFactions && 
+                                sprite.enemyFactions.includes(targetSprite.faction)) {
+                                // Apply 2 damage, pass isAreaAttack flag to prevent movement
+                                applyDamage(sprite, targetSprite, 2, isAreaAttack);
+                            }
+                        }
+
+                        let newParticle = {x: position.x, y: position.y, visualX: position.x, visualY: position.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
+                            colorSwapR: 1.0,
+                            colorSwapG: 1.0,
+                            colorSwapB: 0.0,
+                            colorSwapA: 1.0,
+                            particleId: randomParticleId
+                        };
+                    
+                        particles.push(newParticle);
+                        gsap.to(newParticle, {
+                            delay: 0,
+                            duration: 0.15 + (dist - 1) * 0.05,
+                            ease: "power2.inOut",
+                            repeat: 0,
+                            colorSwapG: 0.5,
+                            onComplete: () => {
+                                console.log("animation complete?");
+                                particles = particles.filter(p => p.particleId !== randomParticleId);
+                            }
+                        });                
+                    }
+                } else {
+                    console.log("Not enough stamina for special attack! Need 2 stamina.");
+                }
+            }
+            if (keyPressed === "3") {
+                console.log("TRIGGERING ATTACK THREE");
+                // Check if player has enough stamina
+                if (sprite.stamina >= 2) {
+                    // Reduce stamina cost
+                    sprite.stamina -= 2;
+                    
+                    let nearestEnemy = findNearestEnemy(sprite);
+                    if (nearestEnemy) {
+                        console.log("NEAREST ENEMY FOUND", nearestEnemy);
+                    }
+
+                    // Flag to mark this as an area attack (prevents movement to defeated enemies)
+                    const isAreaAttack = true;
+
+                    let steps = getLinePoints(sprite.x, sprite.y, nearestEnemy.x, nearestEnemy.y).slice(1);
+                    let explosionOffsets = [
+                        [0,-1],
+                        [-1,0],
+                        [0,1],
+                        [1,0]
+                    ]
+                    let explosionSteps = explosionOffsets.map(offset => ({x: nearestEnemy.x + offset[0], y: nearestEnemy.y + offset[1]}));
+                    let stepsAndOffsets = steps.concat(explosionSteps);
+                    
+                    for (const step of stepsAndOffsets) {
                         // Check if any enemies are at this position and damage them
                         const spritesAtPosition = spriteMap.getSpritesAt(step.x, step.y);
                         for (const targetSprite of spritesAtPosition) {
@@ -836,150 +985,31 @@ function updateSpritePosition(sprite: Sprite, now: number, interval: number) {
                                 applyDamage(sprite, targetSprite, 2, isAreaAttack);
                             }
                         }
-
-                        // Create visual particle effect
+                        
+                        let dist = Math.abs(step.x - sprite.x) + Math.abs(step.y - sprite.y);
                         let randomParticleId = Math.floor(Math.random() * 1000000);
-
                         let newParticle = {x: step.x, y: step.y, visualX: step.x, visualY: step.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
-                            colorSwapR: 0.0,
-                            colorSwapG: 1.0,
+                            colorSwapR: 1.0,
+                            colorSwapG: 0.0,
                             colorSwapB: 1.0,
                             colorSwapA: 1.0,
                             particleId: randomParticleId
-                        };
-                    
+                        }
                         particles.push(newParticle);
                         gsap.to(newParticle, {
-                            duration: 0.15,
-                            ease: "power1.in",
+                            delay: (dist - 1) * 0.01,
+                            duration: 0.15 + (dist - 1) * 0.02,
+                            ease: "power2.out",
                             repeat: 0,
-                            yoyo: true,
-                            colorSwapG: 0.0,
+                            colorSwapG: 0.5,
                             onComplete: () => {
                                 console.log("animation complete?");
                                 particles = particles.filter(p => p.particleId !== randomParticleId);
                             }
-                        });
-                    }                                
-                }
-            }
-            if (keyPressed === "2") {
-                console.log("TRIGGERING ATTACK TWO");
-                let nearestEnemy = findNearestEnemy(sprite);
-                if (nearestEnemy) {
-                    console.log("NEAREST ENEMY FOUND", nearestEnemy);   
-                }
-                let explosionOffsets = [
-                    [0,-1],
-                    [-1,0],
-                    [0,1],
-                    [1,0],
-                    [-1,1],
-                    [-1,-1],
-                    [1,-1],
-                    [1,1],
-                    [2,0],
-                    [0,2],
-                    [-2,0],
-                    [0,-2]
-                ]
-                
-                // Flag to mark this as an area attack (prevents movement to defeated enemies)
-                const isAreaAttack = true;
-                
-                for (const offset of explosionOffsets) {
-                    let dist = Math.abs(offset[0]) + Math.abs(offset[1]);
-                    let randomParticleId = Math.floor(Math.random() * 1000000);
-                    let position = {x: sprite.x + offset[0], y: sprite.y + offset[1]}
-                    
-                    // Check if any enemies are at this position and damage them
-                    const spritesAtPosition = spriteMap.getSpritesAt(position.x, position.y);
-                    for (const targetSprite of spritesAtPosition) {
-                        // Only apply damage to enemies (sprites of enemy factions)
-                        if (targetSprite !== sprite && 
-                            sprite.enemyFactions && 
-                            sprite.enemyFactions.includes(targetSprite.faction)) {
-                            // Apply 2 damage, pass isAreaAttack flag to prevent movement
-                            applyDamage(sprite, targetSprite, 2, isAreaAttack);
-                        }
+                        });                
                     }
-
-                    let newParticle = {x: position.x, y: position.y, visualX: position.x, visualY: position.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
-                        colorSwapR: 1.0,
-                        colorSwapG: 1.0,
-                        colorSwapB: 0.0,
-                        colorSwapA: 1.0,
-                        particleId: randomParticleId
-                    };
-                
-                    particles.push(newParticle);
-                    gsap.to(newParticle, {
-                        delay: 0,
-                        duration: 0.15 + (dist - 1) * 0.05,
-                        ease: "power2.inOut",
-                        repeat: 0,
-                        colorSwapG: 0.5,
-                        onComplete: () => {
-                            console.log("animation complete?");
-                            particles = particles.filter(p => p.particleId !== randomParticleId);
-                        }
-                    });                
-                }
-            }
-            if (keyPressed === "3") {
-                console.log("TRIGGERING ATTACK THREE");
-                let nearestEnemy = findNearestEnemy(sprite);
-                if (nearestEnemy) {
-                    console.log("NEAREST ENEMY FOUND", nearestEnemy);
-                }
-
-                // Flag to mark this as an area attack (prevents movement to defeated enemies)
-                const isAreaAttack = true;
-
-                let steps = getLinePoints(sprite.x, sprite.y, nearestEnemy.x, nearestEnemy.y).slice(1);
-                let explosionOffsets = [
-                    [0,-1],
-                    [-1,0],
-                    [0,1],
-                    [1,0]
-                ]
-                let explosionSteps = explosionOffsets.map(offset => ({x: nearestEnemy.x + offset[0], y: nearestEnemy.y + offset[1]}));
-                let stepsAndOffsets = steps.concat(explosionSteps);
-                
-                for (const step of stepsAndOffsets) {
-                    // Check if any enemies are at this position and damage them
-                    const spritesAtPosition = spriteMap.getSpritesAt(step.x, step.y);
-                    for (const targetSprite of spritesAtPosition) {
-                        // Only apply damage to enemies (sprites of enemy factions)
-                        if (targetSprite !== sprite && 
-                            sprite.enemyFactions && 
-                            sprite.enemyFactions.includes(targetSprite.faction)) {
-                            // Apply 2 damage, pass isAreaAttack flag to prevent movement
-                            applyDamage(sprite, targetSprite, 2, isAreaAttack);
-                        }
-                    }
-                    
-                    let dist = Math.abs(step.x - sprite.x) + Math.abs(step.y - sprite.y);
-                    let randomParticleId = Math.floor(Math.random() * 1000000);
-                    let newParticle = {x: step.x, y: step.y, visualX: step.x, visualY: step.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
-                        colorSwapR: 1.0,
-                        colorSwapG: 0.0,
-                        colorSwapB: 1.0,
-                        colorSwapA: 1.0,
-                        particleId: randomParticleId
-                    }
-                    particles.push(newParticle);
-                    gsap.to(newParticle, {
-                        delay: (dist - 1) * 0.01,
-                        duration: 0.15 + (dist - 1) * 0.02,
-                        ease: "power2.out",
-                        repeat: 0,
-                        colorSwapG: 0.5,
-                        onComplete: () => {
-                            console.log("animation complete?");
-                            particles = particles.filter(p => p.particleId !== randomParticleId);
-                        }
-                    });                
+                } else {
+                    console.log("Not enough stamina for special attack! Need 2 stamina.");
                 }
             }
             keyPressed = null;
@@ -1196,6 +1226,19 @@ function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1, isAre
     
     // Check if the sprite is defeated
     if (target.hitpoints <= 0) {
+        // Check if this was a melee attack (not an area attack and attacker exists)
+        if (!isAreaAttack && attacker && !attacker.isStructure) {
+            // Determine if attacker and target were adjacent (manhattan distance = 1)
+            const distance = Math.abs(attacker.x - target.x) + Math.abs(attacker.y - target.y);
+            if (distance === 1) {
+                // This was a melee kill - grant stamina before handling defeat
+                if (attacker.stamina < attacker.maxStamina) {
+                    attacker.stamina += 1;
+                    console.log(`${attacker.faction} ${attacker.isPlayer ? "player" : (attacker.isChampion ? "champion" : "unit")} gained 1 stamina for melee kill! (${attacker.stamina}/${attacker.maxStamina})`);
+                }
+            }
+        }
+        
         // For area attacks, don't pass the attacker to prevent movement
         handleSpriteDefeat(target, isAreaAttack ? null : attacker);
     }
@@ -1323,13 +1366,24 @@ function initializeSpritePosition(isPlayer = false, faction = "human"): Sprite {
         enemyFactions: enemyFactions, // Add the enemy factions list
         maxHitpoints: isPlayer ? 10 : (isChampion ? 5 : 1),
         hitpoints: isPlayer ? 10 : (isChampion ? 5 : 1),
+        maxStamina: isPlayer ? 5 : (isChampion ? 2 : 0),
+        stamina: isPlayer ? 5 : (isChampion ? 2 : 0),
         lastMoveTime: Date.now(),
         movementDelay: isPlayer ? 0 : 200 + Math.floor(Math.random() * 400),
         isStructure: false,
         useBackgroundSpritesheet: false,
         isChampion: isChampion,
         takingDamage: false,
-        damageUntil: undefined
+        damageUntil: undefined,
+        // Add regeneration properties if it's the player
+        ...(isPlayer && {
+            healthRegenFrequency: 500, // Regenerate health every 500ms
+            healthRegenTimeElapsed: 0, // Initialize timer
+            healthRegenAmount: 1, // Regenerate 1 HP per cycle
+            staminaRegenFrequency: 1000, // Regenerate stamina every 1000ms
+            staminaRegenTimeElapsed: 0, // Initialize timer
+            staminaRegenAmount: 1 // Regenerate 1 stamina per cycle
+        })
     };
     
     // Add sprite to spatial hash
@@ -1350,6 +1404,60 @@ let lastNpcCount: number | null = null;
 // This will be initialized properly once gameParams is available
 let lastMapSize: number | null = null;
 
+// Add this function to handle regeneration of health and stamina
+function handleRegeneration(sprite: Sprite, deltaTime: number) {
+    // Skip if the sprite doesn't have regeneration properties
+    if (!sprite.healthRegenFrequency && !sprite.staminaRegenFrequency) {
+        return;
+    }
+    
+    // Handle health regeneration
+    if (sprite.healthRegenFrequency && sprite.healthRegenAmount) {
+        // Initialize time elapsed if needed
+        if (sprite.healthRegenTimeElapsed === undefined) {
+            sprite.healthRegenTimeElapsed = 0;
+        }
+        
+        // Accumulate time
+        sprite.healthRegenTimeElapsed += deltaTime;
+        
+        // Check if enough time has passed to regenerate
+        if (sprite.healthRegenTimeElapsed >= sprite.healthRegenFrequency) {
+            // Only regenerate if not at max health
+            if (sprite.hitpoints < sprite.maxHitpoints) {
+                sprite.hitpoints = Math.min(sprite.hitpoints + sprite.healthRegenAmount, sprite.maxHitpoints);
+                console.log(`${sprite.faction} ${sprite.isPlayer ? "player" : "entity"} regenerated ${sprite.healthRegenAmount} health. Now at ${sprite.hitpoints}/${sprite.maxHitpoints}`);
+            }
+            
+            // Reset timer (keeping any overflow)
+            sprite.healthRegenTimeElapsed %= sprite.healthRegenFrequency;
+        }
+    }
+    
+    // Handle stamina regeneration
+    if (sprite.staminaRegenFrequency && sprite.staminaRegenAmount) {
+        // Initialize time elapsed if needed
+        if (sprite.staminaRegenTimeElapsed === undefined) {
+            sprite.staminaRegenTimeElapsed = 0;
+        }
+        
+        // Accumulate time
+        sprite.staminaRegenTimeElapsed += deltaTime;
+        
+        // Check if enough time has passed to regenerate
+        if (sprite.staminaRegenTimeElapsed >= sprite.staminaRegenFrequency) {
+            // Only regenerate if not at max stamina
+            if (sprite.stamina < sprite.maxStamina) {
+                sprite.stamina = Math.min(sprite.stamina + sprite.staminaRegenAmount, sprite.maxStamina);
+                console.log(`${sprite.faction} ${sprite.isPlayer ? "player" : "entity"} regenerated ${sprite.staminaRegenAmount} stamina. Now at ${sprite.stamina}/${sprite.maxStamina}`);
+            }
+            
+            // Reset timer (keeping any overflow)
+            sprite.staminaRegenTimeElapsed %= sprite.staminaRegenFrequency;
+        }
+    }
+}
+
 function draw_frame(timestamp: number) {
     // If window.gameParams is not yet initialized, just draw the next frame
     if (!window.gameParams) {
@@ -1364,6 +1472,7 @@ function draw_frame(timestamp: number) {
     }
     
     const frameStartTime = performance.now();
+    const deltaTime = lastFrameTime ? frameStartTime - lastFrameTime : 0; // Calculate time since last frame
 
     const gl = display.gl;
     const tileSetTexture = display.tileSetTexture;
@@ -1384,6 +1493,19 @@ function draw_frame(timestamp: number) {
     if (!isModalActive) {
         // Check for respawns based on respawn rates
         checkRespawns(now);
+        
+        // Handle regeneration for player
+        if (sprite1) {
+            handleRegeneration(sprite1, deltaTime);
+        }
+        
+        // Handle regeneration for other entities (if needed)
+        // For example, for fortresses:
+        for (const fortress of fortresses) {
+            if (fortress.healthRegenFrequency) {
+                handleRegeneration(fortress, deltaTime);
+            }
+        }
     
         // Check if map size has changed and regenerate map if needed
         if (lastMapSize !== window.gameParams.mapSize) {
@@ -1722,10 +1844,18 @@ function initializePlayerWithAlliance(visualFaction: string, allianceFaction: st
         enemyFactions: allianceFaction === "orc" ? ["undead"] : ["orc"], // Enemies based on alliance
         maxHitpoints: 10,
         hitpoints: 10,
+        maxStamina: 2,
+        stamina: 2,
         lastMoveTime: 0,
         movementDelay: 0,
         isStructure: false,
-        isChampion: false
+        isChampion: false,
+        healthRegenFrequency: 500, // Regenerate health every 500ms
+        healthRegenTimeElapsed: 0, // Initialize timer
+        healthRegenAmount: 1, // Regenerate 1 HP per cycle
+        staminaRegenFrequency: 2000, // Regenerate stamina every 1000ms
+        staminaRegenTimeElapsed: 0, // Initialize timer
+        staminaRegenAmount: 1 // Regenerate 1 stamina per cycle
     };
     
     // Add to spatial hash
