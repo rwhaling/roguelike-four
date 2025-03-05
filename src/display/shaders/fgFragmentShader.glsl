@@ -90,8 +90,10 @@ void main() {
     }
     // Otherwise keep the original color (already set to outColor)
   } else {
-    if (noiseValue > 0.8 && u_aura_color.a > 0.0) {
+    if (noiseValue > 0.9 && u_aura_color.a > 0.0) {
       outColor = mix(outColor, vec4(u_aura_color.rgb, outColor.a), u_aura_color.a);
+    } else if (noiseValue > 0.8 && u_aura_color.a > 0.0) {
+      outColor = mix(outColor, vec4(u_aura_color.rgb, outColor.a), u_aura_color.a * 0.5);
     }
   }
   // For off-black pixels, keep the original color (already set to outColor)

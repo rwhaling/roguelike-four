@@ -1633,6 +1633,10 @@ function resetSpritePositions(playerVisualFaction: string = "human", playerAllia
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
     
+    // First spawn the fortresses so we can position NPCs around them
+    console.log("Spawning fortresses before NPCs...");
+    spawnFortresses();
+    
     // Initialize orcs - MODIFIED LOGIC
     const maxOrcCount = window.gameParams.maxOrcCount || 5;
     // If player is allied with orcs, spawn fewer orcs initially to help player
@@ -1640,9 +1644,10 @@ function resetSpritePositions(playerVisualFaction: string = "human", playerAllia
         ? Math.ceil(maxOrcCount / 2) // Spawn half the max for allied faction
         : maxOrcCount;               // Spawn full amount for enemy faction
     
-    // Always spawn some orcs (both for allies and enemies)
+    console.log(`Spawning ${initialOrcCount} orcs around their fortress...`);
+    // Spawn orcs around their fortress instead of random edges
     for (let i = 0; i < initialOrcCount; i++) {
-        const npc = initializeSpritePosition(false, "orc");
+        const npc = respawnNpcAdjacentToFortress("orc");
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
@@ -1655,17 +1660,14 @@ function resetSpritePositions(playerVisualFaction: string = "human", playerAllia
         ? Math.ceil(maxUndeadCount / 2) // Spawn half the max for allied faction
         : maxUndeadCount;               // Spawn full amount for enemy faction
     
-    // Always spawn some undead (both for allies and enemies)
+    console.log(`Spawning ${initialUndeadCount} undead around their fortress...`);
+    // Spawn undead around their fortress instead of random edges
     for (let i = 0; i < initialUndeadCount; i++) {
-        const npc = initializeSpritePosition(false, "undead");
+        const npc = respawnNpcAdjacentToFortress("undead");
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
-    
-    console.log("About to spawn fortresses in resetSpritePositions...");
-    // Explicitly spawn fortresses
-    spawnFortresses();
     
     // Initialize lastRespawnCheck timestamps
     lastOrcRespawnCheck = Date.now();
@@ -1790,7 +1792,7 @@ function updateMaxUndeadCount(newCount: number) {
     }
 }
 
-// Update the setup function to use max counts
+// Update the setup function to use the new NPC placement approach
 async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) {
     // Wait for gameParams to be available if needed
     if (!window.gameParams) {
@@ -1867,11 +1869,16 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
     
+    // Spawn fortresses first so NPCs can cluster around them
+    console.log("About to spawn fortresses...");
+    spawnFortresses();
+    
     // Initialize orcs - with REDUCED initial count since no alliance chosen yet
     const maxOrcCount = window.gameParams.maxOrcCount || 5;
     const initialOrcCount = Math.ceil(maxOrcCount / 2); // Only spawn half initially
+    console.log(`Spawning ${initialOrcCount} initial orcs around their fortress...`);
     for (let i = 0; i < initialOrcCount; i++) {
-        const npc = initializeSpritePosition(false, "orc");
+        const npc = respawnNpcAdjacentToFortress("orc");
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
@@ -1880,16 +1887,13 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     // Initialize undead - with REDUCED initial count since no alliance chosen yet
     const maxUndeadCount = window.gameParams.maxUndeadCount || 5;
     const initialUndeadCount = Math.ceil(maxUndeadCount / 2); // Only spawn half initially
+    console.log(`Spawning ${initialUndeadCount} initial undead around their fortress...`);
     for (let i = 0; i < initialUndeadCount; i++) {
-        const npc = initializeSpritePosition(false, "undead");
+        const npc = respawnNpcAdjacentToFortress("undead");
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
-    
-    console.log("About to spawn fortresses...");
-    // Explicitly spawn fortresses here
-    spawnFortresses();
     
     // Initialize lastRespawnCheck timestamps
     lastOrcRespawnCheck = Date.now();

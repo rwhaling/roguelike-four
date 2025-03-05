@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 // Create a global object to allow test.ts to access and modify game parameters
 // This is the single source of truth for initialization
 window.gameParams = {
-  moveSpeed: 50,
+  moveSpeed: 100,
   lightingEnabled: false,
   performanceStats: "Initializing...",
   zoom: 20.0,
@@ -13,8 +13,8 @@ window.gameParams = {
   mapHeight: 16,
   maxOrcCount: 20,
   maxUndeadCount: 20,
-  orcRespawnRate: 200,
-  undeadRespawnRate: 200,
+  orcRespawnRate: 300,
+  undeadRespawnRate: 300,
   // New champion-related parameters
   maxOrcChampions: 2,
   maxUndeadChampions: 2,
@@ -184,6 +184,110 @@ function GameParametersApp() {
   return (
     <div className="w-full max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-md">
       <h2 className="text-xl font-bold mb-6 text-gray-700">Game Parameters</h2>
+      
+      {/* Game Status (Read-only fields) - MOVED UP */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold mb-3 text-gray-700">Game Status</h3>
+        
+        <div className="grid grid-cols-2 gap-4">
+          {/* Performance metrics */}
+          <div className="col-span-2 md:col-span-1">
+            <h4 className="font-medium text-sm text-gray-600 mb-2">Performance</h4>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="text-sm text-gray-700">Render Time:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.renderTime} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
+              
+              <div className="text-sm text-gray-700">FPS:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.fps} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
+            </div>
+          </div>
+          
+          {/* Player stats */}
+          <div className="col-span-2 md:col-span-1">
+            <h4 className="font-medium text-sm text-gray-600 mb-2">Player</h4>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="text-sm text-gray-700">Health:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.playerHealth} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
+            </div>
+          </div>
+          
+          {/* Faction stats */}
+          <div className="col-span-2">
+            <h4 className="font-medium text-sm text-gray-600 mb-2">Faction Status</h4>
+            <div className="grid grid-cols-4 gap-2">
+              <div className="text-sm text-gray-700">Orcs:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.orcCount} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
+              
+              <div className="text-sm text-gray-700">Undead:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.undeadCount} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
+              
+              {/* Add champion status */}
+              <div className="text-sm text-gray-700">Orc Champions:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.orcChampions} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
+              
+              <div className="text-sm text-gray-700">Undead Champions:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.undeadChampions} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
+              />
+            </div>
+          </div>
+          
+          {/* Fortress stats */}
+          <div className="col-span-2">
+            <h4 className="font-medium text-sm text-gray-600 mb-2">Fortresses</h4>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-sm text-gray-700">Orc Fortress:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.orcFortress} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 col-span-2" 
+              />
+              
+              <div className="text-sm text-gray-700">Undead Fortress:</div>
+              <input 
+                type="text" 
+                readOnly 
+                value={stats.undeadFortress} 
+                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 col-span-2" 
+              />
+            </div>
+          </div>
+        </div>
+      </div>
       
       {/* Movement Speed */}
       <div className="mb-4 flex items-center gap-4">
@@ -430,110 +534,6 @@ function GameParametersApp() {
         <span className="w-16 text-right text-gray-600">
           {gameParameters.undeadChampionSpawnChance}%
         </span>
-      </div>
-      
-      {/* Game Status (Read-only fields) */}
-      <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-semibold mb-3 text-gray-700">Game Status</h3>
-        
-        <div className="grid grid-cols-2 gap-4">
-          {/* Performance metrics */}
-          <div className="col-span-2 md:col-span-1">
-            <h4 className="font-medium text-sm text-gray-600 mb-2">Performance</h4>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="text-sm text-gray-700">Render Time:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.renderTime} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
-              />
-              
-              <div className="text-sm text-gray-700">FPS:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.fps} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
-              />
-            </div>
-          </div>
-          
-          {/* Player stats */}
-          <div className="col-span-2 md:col-span-1">
-            <h4 className="font-medium text-sm text-gray-600 mb-2">Player</h4>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="text-sm text-gray-700">Health:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.playerHealth} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
-              />
-            </div>
-          </div>
-          
-          {/* Faction stats */}
-          <div className="col-span-2">
-            <h4 className="font-medium text-sm text-gray-600 mb-2">Faction Status</h4>
-            <div className="grid grid-cols-4 gap-2">
-              <div className="text-sm text-gray-700">Orcs:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.orcCount} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
-              />
-              
-              <div className="text-sm text-gray-700">Undead:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.undeadCount} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
-              />
-              
-              {/* Add champion status */}
-              <div className="text-sm text-gray-700">Orc Champions:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.orcChampions} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
-              />
-              
-              <div className="text-sm text-gray-700">Undead Champions:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.undeadChampions} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
-              />
-            </div>
-          </div>
-          
-          {/* Fortress stats */}
-          <div className="col-span-2">
-            <h4 className="font-medium text-sm text-gray-600 mb-2">Fortresses</h4>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="text-sm text-gray-700">Orc Fortress:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.orcFortress} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 col-span-2" 
-              />
-              
-              <div className="text-sm text-gray-700">Undead Fortress:</div>
-              <input 
-                type="text" 
-                readOnly 
-                value={stats.undeadFortress} 
-                className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 col-span-2" 
-              />
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
