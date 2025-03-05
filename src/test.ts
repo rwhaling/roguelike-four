@@ -1473,9 +1473,47 @@ function draw_frame(timestamp: number) {
         
         // If it's the player, optionally draw health indicators
         if (sprite.isPlayer) {
-            // You could draw health indicators around the player
-            // For example, small hearts or a health bar
+
         }
+
+        if (sprite.hitpoints < sprite.maxHitpoints) {
+            let healthPercent = sprite.hitpoints / sprite.maxHitpoints;
+            let healthBarWidth = 1.5 * healthPercent;
+            let healthBarEmptyWidth = 1.5 - healthBarWidth;
+            let healthBarXOffset = -0.25;
+            let healthBarYOffset = -0.25;
+            let healthBarHeight = 0.2;
+            
+            // Draw background/empty health bar (gray)
+            display.drawRect(
+                15, 0, // Use a blank/empty sprite
+                spritePos.x + healthBarXOffset, 
+                spritePos.y + healthBarYOffset,
+                1.5, // Full width for background
+                healthBarHeight,
+                camera_pos_x,
+                camera_pos_y,
+                true, // Use bg tileset for solid color
+                [0.3, 0.3, 0.3, 0.7] // Dark gray with transparency
+            );
+            
+            // Draw current health bar (green to red based on health)
+            if (healthBarWidth > 0) {
+                // Color transitions from green (full health) to red (low health)                
+                display.drawRect(
+                    15, 0, // Use a blank/empty sprite
+                    spritePos.x + healthBarXOffset, 
+                    spritePos.y + healthBarYOffset,
+                    healthBarWidth, // Width based on current health
+                    healthBarHeight,
+                    camera_pos_x,
+                    camera_pos_y,
+                    true, // Use bg tileset for solid color
+                    [1.0, 0.0, 0.0, 0.9] // Red to green based on health percent
+                );
+            }        
+        }
+        
     }
     
     // Process and draw dying sprites
