@@ -1247,7 +1247,12 @@ function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1, isAre
 
 let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
 let orc_sprites = [[4,9],[6,9],[3,10],[5,10],[7,10],[4,11],[6,11]]
+let lizard_sprites = [[10,21],[12,21],[9,22],[11,22],[13,22]]
+let siren_sprites = [[3,26],[5,26],[7,26],[4,27],[6,27],[8,27],[5,28],[9,28]]
+let dragon_sprites = [[6,37],[10,37],[9,38],[11,38],[7,40],[10,41],[12,41]]
+// let dragon_sprites = [[6,37]]
 let human_sprites = [[9,15],[11,15],[13,15],[8,16],[10,16],[12,16],[9,17],[11,17]]
+let gryphon_sprites = [[7,38],[8,39],[5,46],[4,47],[5,48],[4,49],[6,49]]
 
 // Function to initialize a regular NPC (grunt)
 function initializeNpc(faction: string): Sprite {
@@ -1296,8 +1301,12 @@ function initializeNpc(faction: string): Sprite {
         selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
     } else if (faction === "undead") {
         selectedSprite = undead_sprites[Math.floor(Math.random() * undead_sprites.length)];
+        // selectedSprite = dragon_sprites[Math.floor(Math.random() * dragon_sprites.length)];
+
     } else if (faction === "orc") {
         selectedSprite = orc_sprites[Math.floor(Math.random() * orc_sprites.length)];
+        // selectedSprite = gryphon_sprites[Math.floor(Math.random() * gryphon_sprites.length)];
+
     } else {
         console.warn(`Unknown faction: ${faction}, defaulting to human`);
         selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
