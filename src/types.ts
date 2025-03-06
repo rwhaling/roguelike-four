@@ -111,3 +111,11 @@ export interface AnimationQueue {
     update(currentTime: number): void;
     getActiveAnimation(spriteId: string): Animation | null;
 }
+
+// Campaign system to provide indirection between colors and factions
+export interface Campaign {
+  currentRedFaction: string,
+  currentBlueFaction: string,
+  currentLevel: number,
+  gameHistory: any[]
+}

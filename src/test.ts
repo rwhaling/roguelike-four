@@ -175,101 +175,60 @@ let undeadChampions = 0;
 
 // Function to spawn fortresses
 function spawnFortresses() {
-    console.log("Starting fortress spawning...");
-    
-    // Clear existing fortresses
-    fortresses = [];
-    
-    // Map quadrant boundaries
-    const halfWidth = Math.floor(window.gameParams.mapWidth / 2);
-    const halfHeight = Math.floor(window.gameParams.mapHeight / 2);
-    
-    // Ensure we don't place on border walls (add padding of 2)
-    const minX = 2;
-    const minY = 2;
-    const maxOrcX = halfWidth - 2;
-    const maxOrcY = halfHeight - 2;
-    const minUndeadX = halfWidth + 2;
-    const minUndeadY = halfHeight + 2;
-    const maxX = window.gameParams.mapWidth - 3;
-    const maxY = window.gameParams.mapHeight - 3;
-    
-    console.log(`Orc fortress range: (${minX},${minY}) to (${maxOrcX},${maxOrcY})`);
-    console.log(`Undead fortress range: (${minUndeadX},${minUndeadY}) to (${maxX},${maxY})`);
-    
-    // Random position for orc fortress (upper-left quadrant)
-    const orcFortressX = minX + Math.floor(Math.random() * (maxOrcX - minX));
-    const orcFortressY = minY + Math.floor(Math.random() * (maxOrcY - minY));
-    
-    // Random position for undead fortress (lower-right quadrant)
-    const undeadFortressX = minUndeadX + Math.floor(Math.random() * (maxX - minUndeadX));
-    const undeadFortressY = minUndeadY + Math.floor(Math.random() * (maxY - minUndeadY));
-    
-    // Create orc fortress
-    const orcFortress: Sprite = {
-        x: orcFortressX,
-        y: orcFortressY,
-        visualX: orcFortressX,
-        visualY: orcFortressY,
-        sprite_x: 10,
-        sprite_y: 21,
-        prev_x: orcFortressX,
-        prev_y: orcFortressY,
-        animationEndTime: 0,
-        restUntil: 0,
-        isPlayer: false,
-        isStructure: true, // Mark as structure (immobile)
-        faction: "orc",
-        enemyFactions: ["undead", "human"], // Enemies of the orc faction
-        maxHitpoints: 20, // Fortresses have more hitpoints
-        hitpoints: 20,
-        maxStamina: 0,
-        stamina: 0,
-        lastMoveTime: 0,
-        movementDelay: 0,
-        useBackgroundSpritesheet: true, // Use background spritesheet
-        isChampion: false
-    };
-    
-    // Create undead fortress
-    const undeadFortress: Sprite = {
-        x: undeadFortressX,
-        y: undeadFortressY,
-        visualX: undeadFortressX,
-        visualY: undeadFortressY,
-        sprite_x: 10,
-        sprite_y: 22,
-        prev_x: undeadFortressX,
-        prev_y: undeadFortressY,
-        animationEndTime: 0,
-        restUntil: 0,
-        isPlayer: false,
-        isStructure: true, // Mark as structure (immobile)
-        faction: "undead",
-        enemyFactions: ["orc", "human"], // Enemies of the undead faction
-        maxHitpoints: 20, // Fortresses have more hitpoints
-        hitpoints: 20,
-        maxStamina: 0,
-        stamina: 0,
-        lastMoveTime: 0,
-        movementDelay: 0,
-        useBackgroundSpritesheet: true, // Use background spritesheet
-        isChampion: false
-    };
-    
-    // Add to fortresses array for reference
-    fortresses.push(orcFortress, undeadFortress);
-    
-    // Add to spatial hash to block movement
-    spriteMap.add(orcFortress);
-    spriteMap.add(undeadFortress);
-    
-    // Add to allSprites for updating and rendering
-    allSprites.push(orcFortress, undeadFortress);
-    
-    console.log(`Spawned orc fortress at (${orcFortressX}, ${orcFortressY})`);
-    console.log(`Spawned undead fortress at (${undeadFortressX}, ${undeadFortressY})`);
-    console.log(`Total sprites after fortress spawning: ${allSprites.length}`);
+  // Get faction names from campaign
+  const redFaction = window.gameCampaign.currentRedFaction;
+  const blueFaction = window.gameCampaign.currentBlueFaction;
+  
+  // Create Red faction fortress (upper-left quadrant)
+  const redX = Math.floor(window.gameParams.mapWidth / 4);
+  const redY = Math.floor(window.gameParams.mapHeight / 4);
+  const redFortress = createFortress(redX, redY, redFaction);
+  fortresses.push(redFortress);
+  
+  // Create Blue faction fortress (bottom-right quadrant)
+  const blueX = Math.floor(window.gameParams.mapWidth * 3 / 4);
+  const blueY = Math.floor(window.gameParams.mapHeight * 3 / 4);
+  const blueFortress = createFortress(blueX, blueY, blueFaction);
+  fortresses.push(blueFortress);
+}
+
+// Helper function to create a fortress
+function createFortress(x: number, y: number, faction: string): Sprite {
+  const fortress: Sprite = {
+    x: x,
+    y: y,
+    visualX: x,
+    visualY: y,
+    sprite_x: 10,
+    sprite_y: faction === "orc" ? 21 : 22,
+    prev_x: x,
+    prev_y: y,
+    animationEndTime: 0,
+    restUntil: 0,
+    isPlayer: false,
+    isStructure: true, // Mark as structure (immobile)
+    faction: faction,
+    enemyFactions: faction === "orc" ? ["undead", "human"] : ["orc", "human"],
+    maxHitpoints: 20, // Fortresses have more hitpoints
+    hitpoints: 20,
+    maxStamina: 0,
+    stamina: 0,
+    lastMoveTime: 0,
+    movementDelay: 0,
+    useBackgroundSpritesheet: true, // Use background spritesheet
+    isChampion: false
+  };
+  
+  // Add to spatial hash to block movement
+  spriteMap.add(fortress);
+  
+  // Add to allSprites for updating and rendering
+  allSprites.push(fortress);
+  
+  console.log(`Spawned ${faction} fortress at (${x}, ${y})`);
+  console.log(`Total sprites after fortress spawning: ${allSprites.length}`);
+  
+  return fortress;
 }
 
 // Simplified spatial hash implementation

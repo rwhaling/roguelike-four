@@ -1,6 +1,14 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 
+// Create campaign object to map colors to factions
+window.gameCampaign = {
+  currentRedFaction: "orc",
+  currentBlueFaction: "undead",
+  currentLevel: 1,
+  gameHistory: []
+};
+
 // Create a global object to allow test.ts to access and modify game parameters
 // This is the single source of truth for initialization
 window.gameParams = {
@@ -11,15 +19,15 @@ window.gameParams = {
   mapSize: 16,
   mapWidth: 16,
   mapHeight: 16,
-  maxOrcCount: 20,
-  maxUndeadCount: 20,
-  orcRespawnRate: 300,
-  undeadRespawnRate: 300,
-  // New champion-related parameters
-  maxOrcChampions: 2,
-  maxUndeadChampions: 2,
-  orcChampionSpawnChance: 10,
-  undeadChampionSpawnChance: 10
+  maxRedCount: 20,   // Was maxOrcCount
+  maxBlueCount: 20,  // Was maxUndeadCount
+  redRespawnRate: 300,   // Was orcRespawnRate
+  blueRespawnRate: 300,  // Was undeadRespawnRate
+  // Champion-related parameters
+  maxRedChampions: 2,    // Was maxOrcChampions
+  maxBlueChampions: 2,   // Was maxUndeadChampions
+  redChampionSpawnChance: 10,  // Was orcChampionSpawnChance
+  blueChampionSpawnChance: 10  // Was undeadChampionSpawnChance
 };
 
 // Create a separate UI state object to manage game screens
@@ -134,12 +142,12 @@ function GameParametersApp() {
       fps: "N/A",
       playerHealth: "N/A",
       playerStamina: "N/A",
-      orcCount: "N/A",
-      undeadCount: "N/A",
-      orcFortress: "N/A",
-      undeadFortress: "N/A",
-      orcChampions: "N/A",
-      undeadChampions: "N/A"
+      redCount: "N/A",
+      blueCount: "N/A",
+      redFortress: "N/A",
+      blueFortress: "N/A",
+      redChampions: "N/A",
+      blueChampions: "N/A"
     };
     
     if (!statsString || statsString === "Initializing...") return stats;
@@ -161,24 +169,24 @@ function GameParametersApp() {
     if (staminaMatch) stats.playerStamina = `${staminaMatch[1]}/${staminaMatch[2]}`;
     
     // Extract faction counts
-    const orcMatch = statsString.match(/Orcs: (\d+)\/(\d+)/);
-    if (orcMatch) stats.orcCount = `${orcMatch[1]}/${orcMatch[2]}`;
+    const redMatch = statsString.match(/Red: (\d+)\/(\d+)/);
+    if (redMatch) stats.redCount = `${redMatch[1]}/${redMatch[2]}`;
     
-    const undeadMatch = statsString.match(/Undead: (\d+)\/(\d+)/);
-    if (undeadMatch) stats.undeadCount = `${undeadMatch[1]}/${undeadMatch[2]}`;
+    const blueMatch = statsString.match(/Blue: (\d+)\/(\d+)/);
+    if (blueMatch) stats.blueCount = `${blueMatch[1]}/${blueMatch[2]}`;
     
     // Extract fortress info
-    const orcFortressMatch = statsString.match(/orc fortress: \(([\d]+),([\d]+)\) HP: (\d+)\/(\d+)/);
-    if (orcFortressMatch) stats.orcFortress = `Pos: (${orcFortressMatch[1]},${orcFortressMatch[2]}) HP: ${orcFortressMatch[3]}/${orcFortressMatch[4]}`;
+    const redFortressMatch = statsString.match(/red fortress: \(([\d]+),([\d]+)\) HP: (\d+)\/(\d+)/);
+    if (redFortressMatch) stats.redFortress = `Pos: (${redFortressMatch[1]},${redFortressMatch[2]}) HP: ${redFortressMatch[3]}/${redFortressMatch[4]}`;
     
-    const undeadFortressMatch = statsString.match(/undead fortress: \(([\d]+),([\d]+)\) HP: (\d+)\/(\d+)/);
-    if (undeadFortressMatch) stats.undeadFortress = `Pos: (${undeadFortressMatch[1]},${undeadFortressMatch[2]}) HP: ${undeadFortressMatch[3]}/${undeadFortressMatch[4]}`;
+    const blueFortressMatch = statsString.match(/blue fortress: \(([\d]+),([\d]+)\) HP: (\d+)\/(\d+)/);
+    if (blueFortressMatch) stats.blueFortress = `Pos: (${blueFortressMatch[1]},${blueFortressMatch[2]}) HP: ${blueFortressMatch[3]}/${blueFortressMatch[4]}`;
     
     // Extract champion counts
-    const championMatch = statsString.match(/Champions: Orc (\d+)\/(\d+), Undead (\d+)\/(\d+)/);
+    const championMatch = statsString.match(/Champions: Red (\d+)\/(\d+), Blue (\d+)\/(\d+)/);
     if (championMatch) {
-      stats.orcChampions = `${championMatch[1]}/${championMatch[2]}`;
-      stats.undeadChampions = `${championMatch[3]}/${championMatch[4]}`;
+      stats.redChampions = `${championMatch[1]}/${championMatch[2]}`;
+      stats.blueChampions = `${championMatch[3]}/${championMatch[4]}`;
     }
     
     return stats;
@@ -243,36 +251,36 @@ function GameParametersApp() {
           <div className="col-span-2">
             <h4 className="font-medium text-sm text-gray-600 mb-2">Faction Status</h4>
             <div className="grid grid-cols-4 gap-2">
-              <div className="text-sm text-gray-700">Orcs:</div>
+              <div className="text-sm text-gray-700">Red:</div>
               <input 
                 type="text" 
                 readOnly 
-                value={stats.orcCount} 
+                value={stats.redCount} 
                 className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
               />
               
-              <div className="text-sm text-gray-700">Undead:</div>
+              <div className="text-sm text-gray-700">Blue:</div>
               <input 
                 type="text" 
                 readOnly 
-                value={stats.undeadCount} 
+                value={stats.blueCount} 
                 className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
               />
               
               {/* Add champion status */}
-              <div className="text-sm text-gray-700">Orc Champions:</div>
+              <div className="text-sm text-gray-700">Red Champions:</div>
               <input 
                 type="text" 
                 readOnly 
-                value={stats.orcChampions} 
+                value={stats.redChampions} 
                 className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
               />
               
-              <div className="text-sm text-gray-700">Undead Champions:</div>
+              <div className="text-sm text-gray-700">Blue Champions:</div>
               <input 
                 type="text" 
                 readOnly 
-                value={stats.undeadChampions} 
+                value={stats.blueChampions} 
                 className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600" 
               />
             </div>
@@ -282,19 +290,19 @@ function GameParametersApp() {
           <div className="col-span-2">
             <h4 className="font-medium text-sm text-gray-600 mb-2">Fortresses</h4>
             <div className="grid grid-cols-3 gap-2">
-              <div className="text-sm text-gray-700">Orc Fortress:</div>
+              <div className="text-sm text-gray-700">Red Fortress:</div>
               <input 
                 type="text" 
                 readOnly 
-                value={stats.orcFortress} 
+                value={stats.redFortress} 
                 className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 col-span-2" 
               />
               
-              <div className="text-sm text-gray-700">Undead Fortress:</div>
+              <div className="text-sm text-gray-700">Blue Fortress:</div>
               <input 
                 type="text" 
                 readOnly 
-                value={stats.undeadFortress} 
+                value={stats.blueFortress} 
                 className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 col-span-2" 
               />
             </div>
@@ -323,87 +331,87 @@ function GameParametersApp() {
         </span>
       </div>
       
-      {/* Max Orc Count */}
+      {/* Max Red Count (formerly Max Orc Count) */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Max Orcs</label>
+        <label className="w-32 font-medium text-gray-700">Max {window.gameCampaign.currentRedFaction}</label>
         <input
           type="range"
           min="0"
           max="50"
           step="1"
-          value={gameParameters.maxOrcCount}
+          value={gameParameters.maxRedCount}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.maxOrcCount = value;
-            setGameParameters({...window.gameParams, maxOrcCount: value});
+            window.gameParams.maxRedCount = value;
+            setGameParameters({...window.gameParams, maxRedCount: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.maxOrcCount}
+          {gameParameters.maxRedCount}
         </span>
       </div>
       
-      {/* Max Undead Count */}
+      {/* Max Blue Count (formerly Max Undead Count) */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Max Undead</label>
+        <label className="w-32 font-medium text-gray-700">Max {window.gameCampaign.currentBlueFaction}</label>
         <input
           type="range"
           min="0"
           max="50"
           step="1"
-          value={gameParameters.maxUndeadCount}
+          value={gameParameters.maxBlueCount}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.maxUndeadCount = value;
-            setGameParameters({...window.gameParams, maxUndeadCount: value});
+            window.gameParams.maxBlueCount = value;
+            setGameParameters({...window.gameParams, maxBlueCount: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.maxUndeadCount}
+          {gameParameters.maxBlueCount}
         </span>
       </div>
       
-      {/* Orc Respawn Rate */}
+      {/* Red Respawn Rate (formerly Orc Respawn Rate) */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Orc Respawn</label>
+        <label className="w-32 font-medium text-gray-700">{window.gameCampaign.currentRedFaction} Respawn</label>
         <input
           type="range"
           min="100"
           max="10000"
           step="100"
-          value={gameParameters.orcRespawnRate}
+          value={gameParameters.redRespawnRate}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.orcRespawnRate = value;
-            setGameParameters({...window.gameParams, orcRespawnRate: value});
+            window.gameParams.redRespawnRate = value;
+            setGameParameters({...window.gameParams, redRespawnRate: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.orcRespawnRate}ms
+          {gameParameters.redRespawnRate}ms
         </span>
       </div>
       
-      {/* Undead Respawn Rate */}
+      {/* Blue Respawn Rate */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Undead Respawn</label>
+        <label className="w-32 font-medium text-gray-700">Blue Respawn</label>
         <input
           type="range"
           min="100"
           max="10000"
           step="100"
-          value={gameParameters.undeadRespawnRate}
+          value={gameParameters.blueRespawnRate}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.undeadRespawnRate = value;
-            setGameParameters({...window.gameParams, undeadRespawnRate: value});
+            window.gameParams.blueRespawnRate = value;
+            setGameParameters({...window.gameParams, blueRespawnRate: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.undeadRespawnRate}ms
+          {gameParameters.blueRespawnRate}ms
         </span>
       </div>
       
@@ -465,87 +473,87 @@ function GameParametersApp() {
         </span>
       </div>
       
-      {/* Max Orc Champions */}
+      {/* Max Red Champions */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Max Orc Champions</label>
+        <label className="w-32 font-medium text-gray-700">Max Red Champions</label>
         <input
           type="range"
           min="0"
           max="10"
           step="1"
-          value={gameParameters.maxOrcChampions}
+          value={gameParameters.maxRedChampions}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.maxOrcChampions = value;
-            setGameParameters({...window.gameParams, maxOrcChampions: value});
+            window.gameParams.maxRedChampions = value;
+            setGameParameters({...window.gameParams, maxRedChampions: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.maxOrcChampions}
+          {gameParameters.maxRedChampions}
         </span>
       </div>
       
-      {/* Max Undead Champions */}
+      {/* Max Blue Champions */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Max Undead Champions</label>
+        <label className="w-32 font-medium text-gray-700">Max Blue Champions</label>
         <input
           type="range"
           min="0"
           max="10"
           step="1"
-          value={gameParameters.maxUndeadChampions}
+          value={gameParameters.maxBlueChampions}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.maxUndeadChampions = value;
-            setGameParameters({...window.gameParams, maxUndeadChampions: value});
+            window.gameParams.maxBlueChampions = value;
+            setGameParameters({...window.gameParams, maxBlueChampions: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.maxUndeadChampions}
+          {gameParameters.maxBlueChampions}
         </span>
       </div>
       
-      {/* Orc Champion Spawn % */}
+      {/* Red Champion Spawn % */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Orc Champion %</label>
+        <label className="w-32 font-medium text-gray-700">Red Champion %</label>
         <input
           type="range"
           min="0"
           max="50"
           step="1"
-          value={gameParameters.orcChampionSpawnChance}
+          value={gameParameters.redChampionSpawnChance}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.orcChampionSpawnChance = value;
-            setGameParameters({...window.gameParams, orcChampionSpawnChance: value});
+            window.gameParams.redChampionSpawnChance = value;
+            setGameParameters({...window.gameParams, redChampionSpawnChance: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.orcChampionSpawnChance}%
+          {gameParameters.redChampionSpawnChance}%
         </span>
       </div>
       
-      {/* Undead Champion Spawn % */}
+      {/* Blue Champion Spawn % */}
       <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Undead Champion %</label>
+        <label className="w-32 font-medium text-gray-700">Blue Champion %</label>
         <input
           type="range"
           min="0"
           max="50"
           step="1"
-          value={gameParameters.undeadChampionSpawnChance}
+          value={gameParameters.blueChampionSpawnChance}
           className="flex-grow"
           onChange={(e) => {
             const value = parseInt(e.target.value);
-            window.gameParams.undeadChampionSpawnChance = value;
-            setGameParameters({...window.gameParams, undeadChampionSpawnChance: value});
+            window.gameParams.blueChampionSpawnChance = value;
+            setGameParameters({...window.gameParams, blueChampionSpawnChance: value});
           }}
         />
         <span className="w-16 text-right text-gray-600">
-          {gameParameters.undeadChampionSpawnChance}%
+          {gameParameters.blueChampionSpawnChance}%
         </span>
       </div>
     </div>
@@ -569,6 +577,10 @@ function FactionSelectScreen() {
     }
   };
 
+  // Get current factions from campaign
+  const redFaction = window.gameCampaign.currentRedFaction;
+  const blueFaction = window.gameCampaign.currentBlueFaction;
+
   // Styles for fortress sprites - using inline styles for compatibility
   const fortressStyle: React.CSSProperties = {
     width: '16px',
@@ -581,12 +593,12 @@ function FactionSelectScreen() {
     transform: 'scale(4)'
   };
   
-  const orcFortressStyle = {
+  const redFortressStyle = {
     ...fortressStyle,
     backgroundPosition: '-160px -336px' // 10,21 in a 16x16 grid
   };
   
-  const undeadFortressStyle = {
+  const blueFortressStyle = {
     ...fortressStyle,
     backgroundPosition: '-160px -352px' // 10,22 in a 16x16 grid
   };
@@ -599,23 +611,23 @@ function FactionSelectScreen() {
         <div className="flex justify-center gap-8">
           <div 
             className="faction-choice p-4 border-4 border-red-500 rounded-lg cursor-pointer hover:bg-red-100 transition-all"
-            onClick={() => selectFaction("orc")}
+            onClick={() => selectFaction(redFaction)}
           >
-            <h3 className="text-2xl font-bold text-red-700 mb-2">Orcs</h3>
+            <h3 className="text-2xl font-bold text-red-700 mb-2">{redFaction.charAt(0).toUpperCase() + redFaction.slice(1)}</h3>
             <p className="mb-4">Red warrior faction with strong melee units.</p>
             <div className="text-center p-4 bg-red-200 rounded flex justify-center items-center" style={{ minHeight: '100px' }}>
-              <div style={orcFortressStyle}></div>
+              <div style={redFortressStyle}></div>
             </div>
           </div>
           
           <div 
             className="faction-choice p-4 border-4 border-blue-500 rounded-lg cursor-pointer hover:bg-blue-100 transition-all"
-            onClick={() => selectFaction("undead")}
+            onClick={() => selectFaction(blueFaction)}
           >
-            <h3 className="text-2xl font-bold text-blue-700 mb-2">Undead</h3>
+            <h3 className="text-2xl font-bold text-blue-700 mb-2">{blueFaction.charAt(0).toUpperCase() + blueFaction.slice(1)}</h3>
             <p className="mb-4">Blue undead faction with necromantic powers.</p>
             <div className="text-center p-4 bg-blue-200 rounded flex justify-center items-center" style={{ minHeight: '100px' }}>
-              <div style={undeadFortressStyle}></div>
+              <div style={blueFortressStyle}></div>
             </div>
           </div>
         </div>
@@ -652,7 +664,7 @@ if (gameUIContainer) {
   console.error("Cannot find element #game-ui-container");
 }
 
-// Add TypeScript declaration for window.gameParams
+// Update TypeScript declaration for window
 declare global {
   interface Window {
     gameParams: {
@@ -663,14 +675,14 @@ declare global {
       mapWidth: number;
       mapHeight: number;
       mapSize: number;
-      maxOrcCount: number;
-      maxUndeadCount: number;
-      orcRespawnRate: number;
-      undeadRespawnRate: number;
-      maxOrcChampions: number;
-      maxUndeadChampions: number;
-      orcChampionSpawnChance: number;
-      undeadChampionSpawnChance: number;
+      maxRedCount: number;      // Was maxOrcCount
+      maxBlueCount: number;     // Was maxUndeadCount
+      redRespawnRate: number;   // Was orcRespawnRate
+      blueRespawnRate: number;  // Was undeadRespawnRate
+      maxRedChampions: number;  // Was maxOrcChampions
+      maxBlueChampions: number; // Was maxUndeadChampions
+      redChampionSpawnChance: number;  // Was orcChampionSpawnChance
+      blueChampionSpawnChance: number; // Was undeadChampionSpawnChance
       playerAttackCooldown?: number;
       npcAttackCooldown?: number;
     };
@@ -683,8 +695,14 @@ declare global {
         [key: string]: any;
       };
     };
-    resetGame?: () => void; // Optional function provided by test.ts
-    startGameWithFaction?: (faction: string) => void; // New function for faction selection
+    gameCampaign: {
+      currentRedFaction: string;
+      currentBlueFaction: string;
+      currentLevel: number;
+      gameHistory: any[];
+    };
+    resetGame?: () => void;
+    startGameWithFaction?: (faction: string) => void;
   }
 }
 
