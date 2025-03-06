@@ -11,9 +11,14 @@ import {
     triggerDeathAnimation 
 } from './animation';
 import gsap from 'gsap';
-// Add variables to track last respawn check times
-let lastOrcRespawnCheck = Date.now();
-let lastUndeadRespawnCheck = Date.now();
+
+// Define last respawn check variables - add at the top of the file with other global variables
+let lastRedRespawnCheck = Date.now();
+let lastBlueRespawnCheck = Date.now();
+
+// Track champions per faction - replace existing orcChampions/undeadChampions variables
+let redChampions = 0;
+let blueChampions = 0;
 
 function init() {
     console.log("about to load sprite sheets")
@@ -169,9 +174,6 @@ function calculateNewPosition(x: number, y: number, direction: {dx: number, dy: 
 // Track fortresses for easy reference
 let fortresses: Sprite[] = [];
 
-// Track champions per faction
-let orcChampions = 0;
-let undeadChampions = 0;
 
 // Function to spawn fortresses
 function spawnFortresses() {
@@ -358,12 +360,15 @@ let particles: Particle[] = [];
 function handleSpriteDefeat(sprite: Sprite, attacker: Sprite | null) {
     console.log(`${sprite.faction} sprite defeated!`);
     
+    // Get faction colors for tracking
+    const redFaction = window.gameCampaign.currentRedFaction;
+    
     // Update champion count if necessary
     if (sprite.isChampion) {
-        if (sprite.faction === "orc") {
-            orcChampions--;
-        } else if (sprite.faction === "undead") {
-            undeadChampions--;
+        if (sprite.faction === redFaction) {
+            redChampions--;
+        } else {
+            blueChampions--;
         }
     }
     
@@ -457,8 +462,8 @@ function handleSpriteDefeat(sprite: Sprite, attacker: Sprite | null) {
 function calculateScore() {
     // Simple score based on game time and enemy defeats
     const factionCounts = countNpcsByFaction();
-    const initialEnemies = window.gameParams.maxOrcCount + window.gameParams.maxUndeadCount;
-    const remainingEnemies = factionCounts.orc + factionCounts.undead;
+    const initialEnemies = window.gameParams.maxRedCount + window.gameParams.maxBlueCount;
+    const remainingEnemies = factionCounts[window.gameCampaign.currentRedFaction] + factionCounts[window.gameCampaign.currentBlueFaction];
     const defeatedEnemies = initialEnemies - remainingEnemies;
     
     return defeatedEnemies * 10; // 10 points per defeated enemy
@@ -502,8 +507,56 @@ function countNpcsByFaction() {
     return counts;
 }
 
+// Modify the checkRespawns function to check fortress status before spawning
+function checkRespawns(now: number) {
+    const factionCounts = countNpcsByFaction();
+    
+    // Get faction names from campaign
+    const redFaction = window.gameCampaign.currentRedFaction;
+    const blueFaction = window.gameCampaign.currentBlueFaction;
+    
+    // Check red faction respawns - only if their fortress exists and is alive
+    if (now - lastRedRespawnCheck >= window.gameParams.redRespawnRate) {
+        lastRedRespawnCheck = now;
+        
+        // Find the red faction fortress
+        const redFortress = fortresses.find(f => f.faction === redFaction);
+        
+        // Only respawn if fortress exists and has health
+        if (redFortress && redFortress.hitpoints > 0 && factionCounts[redFaction] < window.gameParams.maxRedCount) {
+            // Spawn exactly one NPC adjacent to red faction fortress
+            const npc = respawnNpcAdjacentToFortress(redFaction);
+            if (npc) {
+                console.log(`Respawned a ${redFaction} adjacent to fortress. Current count: ${factionCounts[redFaction] + 1}`);
+            }
+        }
+    }
+    
+    // Check blue faction respawns - only if their fortress exists and is alive
+    if (now - lastBlueRespawnCheck >= window.gameParams.blueRespawnRate) {
+        lastBlueRespawnCheck = now;
+        
+        // Find the blue faction fortress
+        const blueFortress = fortresses.find(f => f.faction === blueFaction);
+        
+        // Only respawn if fortress exists and has health
+        if (blueFortress && blueFortress.hitpoints > 0 && factionCounts[blueFaction] < window.gameParams.maxBlueCount) {
+            // Spawn exactly one NPC adjacent to blue faction fortress
+            const npc = respawnNpcAdjacentToFortress(blueFaction);
+            if (npc) {
+                console.log(`Respawned a ${blueFaction} adjacent to fortress. Current count: ${factionCounts[blueFaction] + 1}`);
+            }
+        }
+    }
+}
+
 // Update respawnNpcAdjacentToFortress if it exists to use our new functions
 function respawnNpcAdjacentToFortress(faction: string, forceChampion = false): Sprite {
+    // Get faction colors from campaign
+    const redFaction = window.gameCampaign.currentRedFaction;
+    const blueFaction = window.gameCampaign.currentBlueFaction;
+    const isRedFaction = faction === redFaction;
+    
     // Find the fortress of this faction
     const fortress = fortresses.find(f => f.faction === faction);
     if (!fortress) {
@@ -543,16 +596,33 @@ function respawnNpcAdjacentToFortress(faction: string, forceChampion = false): S
     
     if (forceChampion) {
         // Force champion spawn if requested
-        if ((faction === "orc" && orcChampions < window.gameParams.maxOrcChampions) ||
-            (faction === "undead" && undeadChampions < window.gameParams.maxUndeadChampions)) {
+        if ((isRedFaction && redChampions < window.gameParams.maxRedChampions) ||
+            (!isRedFaction && blueChampions < window.gameParams.maxBlueChampions)) {
             newSprite = initializeChampion(faction);
         } else {
             console.warn(`Cannot spawn ${faction} champion: maximum reached`);
             newSprite = initializeNpc(faction);
         }
     } else {
-        // Use the normal chance-based spawning
-        newSprite = initializeSpritePosition(faction);
+        // Check if we should spawn a champion based on chance
+        const championSpawnChance = isRedFaction ? 
+            window.gameParams.redChampionSpawnChance : 
+            window.gameParams.blueChampionSpawnChance;
+        
+        const currentChampionCount = isRedFaction ? redChampions : blueChampions;
+        const maxChampionCount = isRedFaction ? 
+            window.gameParams.maxRedChampions : 
+            window.gameParams.maxBlueChampions;
+        
+        // Random champion spawn based on chance if below maximum
+        if (currentChampionCount < maxChampionCount && 
+            Math.random() * 100 < championSpawnChance) {
+            newSprite = initializeChampion(faction);
+            console.log(`Spawned a ${faction} champion! Current count: ${currentChampionCount + 1}`);
+        } else {
+            // Regular unit spawn
+            newSprite = initializeNpc(faction);
+        }
     }
     
     if (newSprite) {
@@ -569,43 +639,35 @@ function respawnNpcAdjacentToFortress(faction: string, forceChampion = false): S
     return newSprite;
 }
 
-// Modify the checkRespawns function to check fortress status before spawning
-function checkRespawns(now: number) {
-    const factionCounts = countNpcsByFaction();
+// Function to initialize a champion
+function initializeChampion(faction: string): Sprite {
+    // Get faction colors from campaign
+    const redFaction = window.gameCampaign.currentRedFaction;
+    const isRedFaction = faction === redFaction;
     
-    // Check orc respawns - only if their fortress exists and is alive
-    if (now - lastOrcRespawnCheck >= window.gameParams.orcRespawnRate) {
-        lastOrcRespawnCheck = now;
-        
-        // Find the orc fortress
-        const orcFortress = fortresses.find(f => f.faction === "orc");
-        
-        // Only respawn if fortress exists and has health
-        if (orcFortress && orcFortress.hitpoints > 0 && factionCounts.orc < window.gameParams.maxOrcCount) {
-            // Spawn exactly one orc adjacent to orc fortress
-            const npc = respawnNpcAdjacentToFortress("orc");
-            if (npc) {
-                console.log(`Respawned an orc adjacent to fortress. Current count: ${factionCounts.orc + 1}`);
-            }
-        }
+    // Create a basic NPC first
+    const npc = initializeNpc(faction);
+    
+    // Upgrade to champion
+    npc.isChampion = true;
+    npc.maxHitpoints *= 2;  // Champions have double health
+    npc.hitpoints = npc.maxHitpoints;
+    
+    // Different sprites for champions
+    if (isRedFaction) {
+        // npc.sprite_y = 3;  // Special sprite for red faction champion
+        redChampions++;
+    } else {
+        // npc.sprite_y = 7;  // Special sprite for blue faction champion
+        blueChampions++;
     }
     
-    // Check undead respawns - only if their fortress exists and is alive
-    if (now - lastUndeadRespawnCheck >= window.gameParams.undeadRespawnRate) {
-        lastUndeadRespawnCheck = now;
-        
-        // Find the undead fortress
-        const undeadFortress = fortresses.find(f => f.faction === "undead");
-        
-        // Only respawn if fortress exists and has health
-        if (undeadFortress && undeadFortress.hitpoints > 0 && factionCounts.undead < window.gameParams.maxUndeadCount) {
-            // Spawn exactly one undead adjacent to undead fortress
-            const npc = respawnNpcAdjacentToFortress("undead");
-            if (npc) {
-                console.log(`Respawned an undead adjacent to fortress. Current count: ${factionCounts.undead + 1}`);
-            }
-        }
-    }
+    // Champions move faster
+    npc.movementDelay = 200; // Less delay between movements
+    
+    console.log(`Created a ${faction} champion. Total ${faction} champions: ${isRedFaction ? redChampions : blueChampions}`);
+    
+    return npc;
 }
 
 // Update the displayPlayerHealth function to include stamina
@@ -613,15 +675,19 @@ function displayPlayerHealth() {
     let statsText = "";
     
     if (sprite1) {
+        // Get faction names from campaign
+        const redFaction = window.gameCampaign.currentRedFaction;
+        const blueFaction = window.gameCampaign.currentBlueFaction;
+        
         // Add player health and stamina info
         statsText += `Health: ${sprite1.hitpoints}/${sprite1.maxHitpoints} | Stamina: ${sprite1.stamina}/${sprite1.maxStamina}`;
         
         // Add faction counts to stats
         const counts = countNpcsByFaction();
-        statsText += ` | Orcs: ${counts.orc}/${window.gameParams.maxOrcCount} | Undead: ${counts.undead}/${window.gameParams.maxUndeadCount}`;
+        statsText += ` | ${redFaction}: ${counts[redFaction]}/${window.gameParams.maxRedCount} | ${blueFaction}: ${counts[blueFaction]}/${window.gameParams.maxBlueCount}`;
         
-        // Add champion counts to stats with max from parameters (using existing global variables)
-        statsText += ` | Champions: Orc ${orcChampions}/${window.gameParams.maxOrcChampions}, Undead ${undeadChampions}/${window.gameParams.maxUndeadChampions}`;
+        // Add champion counts to stats with max from parameters
+        statsText += ` | Champions: ${redFaction} ${redChampions}/${window.gameParams.maxRedChampions}, ${blueFaction} ${blueChampions}/${window.gameParams.maxBlueChampions}`;
         
         // Add fortress positions and health
         fortresses.forEach(fortress => {
@@ -1283,126 +1349,23 @@ function initializeNpc(faction: string): Sprite {
     return sprite;
 }
 
-// Function to initialize a champion NPC
-function initializeChampion(faction: string): Sprite {
-    let rand_x, rand_y;
-    let isValidPosition = false;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 20;
-    
-    // For champions, place them along the edges but not on walls
-    while (!isValidPosition && attempts < MAX_ATTEMPTS) {
-        // Decide which edge to spawn on (0=top, 1=right, 2=bottom, 3=left)
-        const edge = Math.floor(Math.random() * 4);
-        
-        switch (edge) {
-            case 0: // Top edge
-                rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
-                rand_y = 1;
-                break;
-            case 1: // Right edge
-                rand_x = window.gameParams.mapWidth - 2;
-                rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
-                break;
-            case 2: // Bottom edge
-                rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
-                rand_y = window.gameParams.mapHeight - 2;
-                break;
-            case 3: // Left edge
-                rand_x = 1;
-                rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
-                break;
-        }
-        
-        isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
-        attempts++;
-    }
-    
-    if (!isValidPosition) {
-        console.warn("Could not find a valid position for champion after multiple attempts");
-        return null;
-    }
-    
-    let selectedSprite;
-    
-    // Choose sprite based on faction
-    if (faction === "human") {
-        selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
-    } else if (faction === "undead") {
-        selectedSprite = undead_sprites[Math.floor(Math.random() * undead_sprites.length)];
-    } else if (faction === "orc") {
-        selectedSprite = orc_sprites[Math.floor(Math.random() * orc_sprites.length)];
-    } else {
-        console.warn(`Unknown faction: ${faction}, defaulting to human`);
-        selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
-        faction = "human";
-    }
-    
-    // Define enemy factions based on this sprite's faction
-    let enemyFactions: string[] = [];
-    if (faction === "orc") {
-        enemyFactions = ["undead", "human"];
-        orcChampions++; // Increment orc champion counter
-    } else if (faction === "undead") {
-        enemyFactions = ["orc", "human"];
-        undeadChampions++; // Increment undead champion counter
-    } else if (faction === "human") {
-        enemyFactions = []; // Human NPCs are neutral
-    }
-    
-    // Create the champion sprite with enhanced attributes
-    const sprite: Sprite = {
-        x: rand_x,
-        y: rand_y,
-        visualX: rand_x,
-        visualY: rand_y,
-        sprite_x: selectedSprite[0],
-        sprite_y: selectedSprite[1],
-        prev_x: rand_x,
-        prev_y: rand_y,
-        animationEndTime: 250,
-        restUntil: 0,
-        isPlayer: false,
-        faction: faction,
-        enemyFactions: enemyFactions,
-        maxHitpoints: 5, // Champions have more health
-        hitpoints: 5,
-        maxStamina: 2, // Champions have stamina for special abilities
-        stamina: 2,
-        lastMoveTime: Date.now(),
-        movementDelay: 200 + Math.floor(Math.random() * 400),
-        isStructure: false,
-        useBackgroundSpritesheet: false,
-        isChampion: true, // Mark as champion
-        takingDamage: false,
-        damageUntil: undefined,
-        // Champions can also regenerate stamina
-        staminaRegenFrequency: 3000, // Regenerate stamina every 3 seconds
-        staminaRegenTimeElapsed: 0,
-        staminaRegenAmount: 1
-    };
-    
-    // Add sprite to spatial hash
-    spriteMap.add(sprite);
-    allSprites.push(sprite);
-    
-    return sprite;
-}
-
 // Now let's update the original initializeSpritePosition function to use our new functions
 function initializeSpritePosition(faction = "human"): Sprite {
     // Determine if this NPC should be a champion
     let isChampion = false;
-    if (faction === "orc") {
-        // Use the parameter for orc champion spawn chance
-        const spawnChance = window.gameParams.orcChampionSpawnChance / 100; // Convert to probability
-        if (Math.random() < spawnChance && orcChampions < window.gameParams.maxOrcChampions) {
+    const redFaction = window.gameCampaign.currentRedFaction;
+    const blueFaction = window.gameCampaign.currentBlueFaction;
+    
+    if (faction === redFaction) {
+        // Use the parameter for red faction champion spawn chance
+        const spawnChance = window.gameParams.redChampionSpawnChance / 100; // Convert to probability
+        if (Math.random() < spawnChance && redChampions < window.gameParams.maxRedChampions) {
             isChampion = true;
         }
-    } else if (faction === "undead") {
-        // Use the parameter for undead champion spawn chance
-        const spawnChance = window.gameParams.undeadChampionSpawnChance / 100; // Convert to probability
-        if (Math.random() < spawnChance && undeadChampions < window.gameParams.maxUndeadChampions) {
+    } else if (faction === blueFaction) {
+        // Use the parameter for blue faction champion spawn chance
+        const spawnChance = window.gameParams.blueChampionSpawnChance / 100; // Convert to probability
+        if (Math.random() < spawnChance && blueChampions < window.gameParams.maxBlueChampions) {
             isChampion = true;
         }
     }
@@ -1762,8 +1725,8 @@ function resetSpritePositions(playerVisualFaction: string = "human", playerAllia
     const allianceFaction = playerAllianceFaction || window.gameUI.screenData.playerFaction || "human";
     
     // Reset champion counters
-    orcChampions = 0;
-    undeadChampions = 0;
+    redChampions = 0;
+    blueChampions = 0;
     
     // Clear existing sprites and spatial hash
     spriteMap.clear();
@@ -1781,41 +1744,41 @@ function resetSpritePositions(playerVisualFaction: string = "human", playerAllia
     console.log("Spawning fortresses before NPCs...");
     spawnFortresses();
     
-    // Initialize orcs - MODIFIED LOGIC
-    const maxOrcCount = window.gameParams.maxOrcCount || 5;
-    // If player is allied with orcs, spawn fewer orcs initially to help player
-    const initialOrcCount = allianceFaction === "orc" 
-        ? Math.ceil(maxOrcCount / 2) // Spawn half the max for allied faction
-        : maxOrcCount;               // Spawn full amount for enemy faction
+    // Initialize red faction - MODIFIED LOGIC
+    const maxRedCount = window.gameParams.maxRedCount || 5;
+    // If player is allied with red, spawn fewer red initially to help player
+    const initialRedCount = allianceFaction === window.gameCampaign.currentRedFaction 
+        ? Math.ceil(maxRedCount / 2) // Spawn half the max for allied faction
+        : maxRedCount;               // Spawn full amount for enemy faction
     
-    console.log(`Spawning ${initialOrcCount} orcs around their fortress...`);
-    // Spawn orcs around their fortress instead of random edges
-    for (let i = 0; i < initialOrcCount; i++) {
-        const npc = respawnNpcAdjacentToFortress("orc");
+    console.log(`Spawning ${initialRedCount} red around their fortress...`);
+    // Spawn red around their fortress instead of random edges
+    for (let i = 0; i < initialRedCount; i++) {
+        const npc = respawnNpcAdjacentToFortress(window.gameCampaign.currentRedFaction);
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
     
-    // Initialize undead - MODIFIED LOGIC
-    const maxUndeadCount = window.gameParams.maxUndeadCount || 5;
-    // If player is allied with undead, spawn fewer undead initially to help player
-    const initialUndeadCount = allianceFaction === "undead" 
-        ? Math.ceil(maxUndeadCount / 2) // Spawn half the max for allied faction
-        : maxUndeadCount;               // Spawn full amount for enemy faction
+    // Initialize blue faction - MODIFIED LOGIC
+    const maxBlueCount = window.gameParams.maxBlueCount || 5;
+    // If player is allied with blue, spawn fewer blue initially to help player
+    const initialBlueCount = allianceFaction === window.gameCampaign.currentBlueFaction 
+        ? Math.ceil(maxBlueCount / 2) // Spawn half the max for allied faction
+        : maxBlueCount;               // Spawn full amount for enemy faction
     
-    console.log(`Spawning ${initialUndeadCount} undead around their fortress...`);
-    // Spawn undead around their fortress instead of random edges
-    for (let i = 0; i < initialUndeadCount; i++) {
-        const npc = respawnNpcAdjacentToFortress("undead");
+    console.log(`Spawning ${initialBlueCount} blue around their fortress...`);
+    // Spawn blue around their fortress instead of random edges
+    for (let i = 0; i < initialBlueCount; i++) {
+        const npc = respawnNpcAdjacentToFortress(window.gameCampaign.currentBlueFaction);
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
     
     // Initialize lastRespawnCheck timestamps
-    lastOrcRespawnCheck = Date.now();
-    lastUndeadRespawnCheck = Date.now();
+    lastRedRespawnCheck = Date.now();
+    lastBlueRespawnCheck = Date.now();
     
     console.log(`Reset complete. Player visual faction: ${playerVisualFaction}, alliance: ${allianceFaction}`);
 }
@@ -1828,12 +1791,12 @@ function initializePlayerWithAlliance(visualFaction: string, allianceFaction: st
     const maxAttempts = 100;
     
     do {
-        if (allianceFaction === "orc") {
-            // Start near orc fortress area (upper-left quadrant)
+        if (allianceFaction === window.gameCampaign.currentRedFaction) {
+            // Start near red fortress area (upper-left quadrant)
             x = 2 + Math.floor(Math.random() * (Math.floor(window.gameParams.mapWidth / 2) - 4));
             y = 2 + Math.floor(Math.random() * (Math.floor(window.gameParams.mapHeight / 2) - 4));
-        } else if (allianceFaction === "undead") {
-            // Start near undead fortress area (bottom-right quadrant)
+        } else if (allianceFaction === window.gameCampaign.currentBlueFaction) {
+            // Start near blue fortress area (bottom-right quadrant)
             x = Math.floor(window.gameParams.mapWidth / 2) + 2 + Math.floor(Math.random() * (window.gameParams.mapWidth / 2 - 4));
             y = Math.floor(window.gameParams.mapHeight / 2) + 2 + Math.floor(Math.random() * (window.gameParams.mapHeight / 2 - 4));
         } else {
@@ -1863,7 +1826,7 @@ function initializePlayerWithAlliance(visualFaction: string, allianceFaction: st
         isPlayer: true,
         useBackgroundSpritesheet: false,
         faction: allianceFaction, // This determines combat behavior
-        enemyFactions: allianceFaction === "orc" ? ["undead"] : ["orc"], // Enemies based on alliance
+        enemyFactions: allianceFaction === window.gameCampaign.currentRedFaction ? [window.gameCampaign.currentBlueFaction] : [window.gameCampaign.currentRedFaction], // Enemies based on alliance
         maxHitpoints: 10,
         hitpoints: 10,
         maxStamina: 2,
@@ -2048,8 +2011,8 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     }
     
     // Initialize lastRespawnCheck timestamps
-    lastOrcRespawnCheck = Date.now();
-    lastUndeadRespawnCheck = Date.now();
+    lastRedRespawnCheck = Date.now();
+    lastBlueRespawnCheck = Date.now();
 
     // Set up keyboard event listeners
     window.addEventListener('keydown', handleKeyDown);
@@ -2124,16 +2087,16 @@ declare global {
       mapWidth: number;
       mapHeight: number;
       mapSize: number;
-      maxOrcCount: number;
-      maxUndeadCount: number;
-      orcRespawnRate: number;
-      undeadRespawnRate: number;
-      maxOrcChampions: number;          // New property
-      maxUndeadChampions: number;       // New property
-      orcChampionSpawnChance: number;   // New property
-      undeadChampionSpawnChance: number; // New property
-      playerAttackCooldown?: number;    // Optional
-      npcAttackCooldown?: number;       // Optional
+      maxRedCount: number;      // Was maxOrcCount
+      maxBlueCount: number;     // Was maxUndeadCount
+      redRespawnRate: number;   // Was orcRespawnRate
+      blueRespawnRate: number;  // Was undeadRespawnRate
+      maxRedChampions: number;  // Was maxOrcChampions
+      maxBlueChampions: number; // Was maxUndeadChampions
+      redChampionSpawnChance: number;  // Was orcChampionSpawnChance
+      blueChampionSpawnChance: number; // Was undeadChampionSpawnChance
+      playerAttackCooldown?: number;
+      npcAttackCooldown?: number;
     };
     gameUI: {
       currentScreen: string;
@@ -2144,8 +2107,14 @@ declare global {
         [key: string]: any;
       };
     };
-    resetGame?: () => void; // Optional function provided by test.ts
-    startGameWithFaction?: (faction: string) => void; // New function for faction selection
+    gameCampaign: {
+      currentRedFaction: string;
+      currentBlueFaction: string;
+      currentLevel: number;
+      gameHistory: any[];
+    };
+    resetGame?: () => void; 
+    startGameWithFaction?: (faction: string) => void;
   }
 }
 
