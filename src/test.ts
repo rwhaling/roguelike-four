@@ -184,18 +184,18 @@ function spawnFortresses() {
   // Create Red faction fortress (upper-left quadrant)
   const redX = Math.floor(window.gameParams.mapWidth / 4);
   const redY = Math.floor(window.gameParams.mapHeight / 4);
-  const redFortress = createFortress(redX, redY, redFaction);
+  const redFortress = createFortress(redX, redY, redFaction, true);
   fortresses.push(redFortress);
   
   // Create Blue faction fortress (bottom-right quadrant)
   const blueX = Math.floor(window.gameParams.mapWidth * 3 / 4);
   const blueY = Math.floor(window.gameParams.mapHeight * 3 / 4);
-  const blueFortress = createFortress(blueX, blueY, blueFaction);
+  const blueFortress = createFortress(blueX, blueY, blueFaction, false);
   fortresses.push(blueFortress);
 }
 
 // Helper function to create a fortress
-function createFortress(x: number, y: number, faction: string): Sprite {
+function createFortress(x: number, y: number, faction: string, isRed: boolean): Sprite {
   // Get faction names from campaign to determine team color
   const redFaction = window.gameCampaign.currentRedFaction;
   
@@ -205,7 +205,7 @@ function createFortress(x: number, y: number, faction: string): Sprite {
     visualX: x,
     visualY: y,
     sprite_x: 10,
-    sprite_y: faction === redFaction ? 21 : 22, // Use sprite_y 21 for red team, 22 for blue team
+    sprite_y: isRed ? 21 : 22, // Use sprite_y 21 for red team, 22 for blue team
     prev_x: x,
     prev_y: y,
     animationEndTime: 0,
@@ -213,7 +213,7 @@ function createFortress(x: number, y: number, faction: string): Sprite {
     isPlayer: false,
     isStructure: true, // Mark as structure (immobile)
     faction: faction,
-    enemyFactions: faction === redFaction ? [window.gameCampaign.currentBlueFaction] : [redFaction],
+    enemyFactions: isRed ? [window.gameCampaign.currentBlueFaction] : [redFaction],
     maxHitpoints: 20, // Fortresses have more hitpoints
     hitpoints: 20,
     maxStamina: 0,
@@ -2145,9 +2145,12 @@ declare global {
       currentBlueFaction: string;
       currentLevel: number;
       gameHistory: any[];
+      selectedFaction: string | null;
     };
     resetGame?: () => void; 
     startGameWithFaction?: (faction: string) => void;
+    retryCurrentLevel?: () => void;
+    startNewCampaign?: () => void;
   }
 }
 
@@ -2195,7 +2198,7 @@ function checkGameEndConditions() {
     // Get player's faction from UI state
     const playerFaction = window.gameUI.screenData.playerFaction || "human";
     
-    // Get current campaign factions instead of hardcoded orc/undead
+    // Get current campaign factions
     const redFaction = window.gameCampaign.currentRedFaction;
     const blueFaction = window.gameCampaign.currentBlueFaction;
     
@@ -2223,14 +2226,32 @@ function checkGameEndConditions() {
         if (blueFortress && blueFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
             console.log(`Victory - ${blueFaction} fortress destroyed!`);
             
-            // Set win screen with appropriate message
-            window.gameUI.currentScreen = "gameOver";
-            window.gameUI.screenData = {
-                message: "You Win! The enemy fortress is destroyed.",
-                score: calculateScore(),
-                playerFaction: playerFaction,
-                isVictory: true
-            };
+            // Count unique factions that have been used (current + history)
+            const usedFactions = new Set<string>();
+            window.gameCampaign.gameHistory.forEach(level => {
+                usedFactions.add(level.currentRedFaction);
+                usedFactions.add(level.currentBlueFaction);
+            });
+            usedFactions.add(redFaction);
+            usedFactions.add(blueFaction);
+            
+            // Check if all factions have been used (6 total factions)
+            const allFactionsUsed = usedFactions.size >= 6;
+            
+            if (allFactionsUsed) {
+                // Campaign victory - all factions have been played
+                showCampaignVictory();
+            } else {
+                // Show level victory screen
+                window.gameUI.currentScreen = "levelVictory";
+                window.gameUI.screenData = {
+                    message: `You destroyed the ${blueFaction} fortress!`,
+                    score: calculateScore(),
+                    playerFaction: playerFaction,
+                    isVictory: true,
+                    defeatedFaction: blueFaction
+                };
+            }
         }
     } else if (playerFaction === blueFaction) {
         // Player is Blue faction - lose if Blue fortress destroyed, win if Red fortress destroyed
@@ -2251,14 +2272,23 @@ function checkGameEndConditions() {
         if (redFortress && redFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
             console.log(`Victory - ${redFaction} fortress destroyed!`);
             
-            // Set win screen with appropriate message
-            window.gameUI.currentScreen = "gameOver";
-            window.gameUI.screenData = {
-                message: "You Win! The enemy fortress is destroyed.",
-                score: calculateScore(),
-                playerFaction: playerFaction,
-                isVictory: true
-            };
+            // Check if there are more factions to play with or if the campaign is complete
+            const availableFactions = getAvailableFactions();
+            
+            if (availableFactions.length >= 2) {
+                // Show level victory screen first
+                window.gameUI.currentScreen = "levelVictory";
+                window.gameUI.screenData = {
+                    message: `You destroyed the ${redFaction} fortress!`,
+                    score: calculateScore(),
+                    playerFaction: playerFaction,
+                    isVictory: true,
+                    defeatedFaction: redFaction
+                };
+            } else {
+                // Campaign victory - all factions have been played
+                showCampaignVictory();
+            }
         }
     } else {
         // Player is neutral (human) - we'll show a message for either fortress being destroyed
@@ -2290,6 +2320,72 @@ function checkGameEndConditions() {
     }
 }
 
+// Helper function to get available (unused) factions
+function getAvailableFactions() {
+    const allAvailableFactions = ["undead", "orc", "lizard", "siren", "dragon", "gryphon"];
+    
+    // Get all factions that have appeared in the campaign history
+    const usedFactions = new Set<string>();
+    
+    // Extract all factions from history
+    window.gameCampaign.gameHistory.forEach(level => {
+        usedFactions.add(level.currentRedFaction);
+        usedFactions.add(level.currentBlueFaction);
+    });
+    
+    // If the current level has factions already, add them too
+    if (window.gameCampaign.currentRedFaction) {
+        usedFactions.add(window.gameCampaign.currentRedFaction);
+    }
+    if (window.gameCampaign.currentBlueFaction) {
+        usedFactions.add(window.gameCampaign.currentBlueFaction);
+    }
+    
+    // Find unused factions
+    const unusedFactions = allAvailableFactions.filter(faction => !usedFactions.has(faction));
+    
+    return unusedFactions;
+}
+
+// Function to advance to the next level after victory
+function advanceToNextLevel() {
+    console.log("Advancing to next level after victory...");
+    
+    // Reset player health if necessary
+    if (sprite1 && sprite1.hitpoints <= 0) {
+        sprite1.hitpoints = sprite1.maxHitpoints;
+    }
+    
+    // Increment level number for the next level
+    window.gameCampaign.currentLevel++;
+    
+    // Switch to faction selection screen
+    window.gameUI.currentScreen = "factionSelect";
+    
+    // Clear player faction to force new selection
+    window.gameUI.screenData.playerFaction = null;
+    window.gameCampaign.selectedFaction = null;
+    
+    // Select new random factions for the next level
+    selectRandomFactions();
+    
+    console.log("Advancing to level", window.gameCampaign.currentLevel);
+}
+
+// Function to show the campaign victory screen
+function showCampaignVictory() {
+    console.log("Campaign complete! Showing victory screen");
+    
+    // Set campaign victory screen
+    window.gameUI.currentScreen = "campaignVictory";
+    window.gameUI.screenData = {
+        message: "Congratulations! You have completed the campaign!",
+        score: calculateScore(),
+        totalLevels: window.gameCampaign.currentLevel,
+        isVictory: true
+    };
+}
+
 // Add a function to handle starting the game with a selected faction
 window.startGameWithFaction = function(faction: string) {
     console.log(`Starting game with player allied to faction: ${faction}`);
@@ -2301,21 +2397,47 @@ window.startGameWithFaction = function(faction: string) {
     resetSpritePositions("human", faction);
 };
 
-// Function to randomly select two factions for the campaign
+// Function to randomly select two factions for the campaign that haven't been used before
 function selectRandomFactions() {
-    const availableFactions = ["undead", "orc", "lizard", "siren", "dragon", "gryphon"];
+    const allAvailableFactions = ["undead", "orc", "lizard", "siren", "dragon", "gryphon"];
     
-    // Shuffle the array using Fisher-Yates algorithm
-    for (let i = availableFactions.length - 1; i > 0; i--) {
+    // Get all factions that have appeared in the campaign history
+    const usedFactions = new Set<string>();
+    
+    // Extract all factions from history
+    window.gameCampaign.gameHistory.forEach(level => {
+        usedFactions.add(level.currentRedFaction);
+        usedFactions.add(level.currentBlueFaction);
+    });
+    
+    // Log the used factions for debugging
+    console.log("Used factions so far:", Array.from(usedFactions));
+    
+    // Find unused factions
+    let unusedFactions = allAvailableFactions.filter(faction => !usedFactions.has(faction));
+    
+    console.log("Unused factions:", unusedFactions);
+    
+    // If we don't have at least 2 unused factions, this means we've used all factions
+    // Instead of resetting, we should trigger campaign victory
+    if (unusedFactions.length < 2) {
+        console.log("All factions have been used - campaign complete!");
+        // Immediately show campaign victory screen
+        showCampaignVictory();
+        return { redFaction: null, blueFaction: null }; // Return null to indicate campaign end
+    }
+    
+    // Shuffle the remaining factions using Fisher-Yates algorithm
+    for (let i = unusedFactions.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [availableFactions[i], availableFactions[j]] = [availableFactions[j], availableFactions[i]];
+        [unusedFactions[i], unusedFactions[j]] = [unusedFactions[j], unusedFactions[i]];
     }
     
     // Take the first two factions from the shuffled array
-    const redFaction = availableFactions[0];
-    const blueFaction = availableFactions[1];
+    const redFaction = unusedFactions[0];
+    const blueFaction = unusedFactions[1];
     
-    console.log(`Randomly selected factions: Red=${redFaction}, Blue=${blueFaction}`);
+    console.log(`Selected new factions: Red=${redFaction}, Blue=${blueFaction}`);
     
     // Update the campaign with the selected factions
     window.gameCampaign.currentRedFaction = redFaction;
@@ -2332,7 +2454,8 @@ function initializeGame() {
             currentRedFaction: "orc", // Default, will be overwritten
             currentBlueFaction: "undead", // Default, will be overwritten
             currentLevel: 1,
-            gameHistory: []
+            gameHistory: [],
+            selectedFaction: null
         };
     }
     
@@ -2362,6 +2485,88 @@ window.resetGame = function() {
     selectRandomFactions();
     
     console.log("Game reset complete - returning to faction select screen");
+};
+
+// Function to retry the current level without changing factions or incrementing level
+window.retryCurrentLevel = function() {
+    console.log("Retrying current level...");
+    
+    // Reset player health if they died
+    if (sprite1 && sprite1.hitpoints <= 0) {
+        sprite1.hitpoints = sprite1.maxHitpoints;
+    }
+    
+    // Switch to faction selection screen but keep the same factions and level
+    window.gameUI.currentScreen = "factionSelect";
+    
+    // Clear player faction to force new selection
+    window.gameUI.screenData.playerFaction = null;
+    window.gameCampaign.selectedFaction = null;
+    
+    console.log("Retrying level", window.gameCampaign.currentLevel, 
+                "with factions:", window.gameCampaign.currentRedFaction, 
+                "and", window.gameCampaign.currentBlueFaction);
+};
+
+// Function to start a completely new campaign
+window.startNewCampaign = function() {
+    console.log("Starting new campaign...");
+    
+    // Reset to level 1
+    window.gameCampaign.currentLevel = 1;
+    
+    // Clear game history
+    window.gameCampaign.gameHistory = [];
+    
+    // Select new random factions for the first level
+    selectRandomFactions();
+    
+    // Reset player's faction selection
+    window.gameUI.screenData.playerFaction = null;
+    window.gameCampaign.selectedFaction = null;
+    
+    // Switch to faction selection screen
+    window.gameUI.currentScreen = "factionSelect";
+    
+    console.log("New campaign started at level 1 with factions:", 
+                window.gameCampaign.currentRedFaction, "and", 
+                window.gameCampaign.currentBlueFaction);
+};
+
+// Update resetGame function to advance to the next level (used after victory)
+window.resetGame = function() {
+    console.log("Advancing to next level after victory...");
+    
+    // First, add the current level to game history
+    window.gameCampaign.gameHistory.push({
+        currentLevel: window.gameCampaign.currentLevel,
+        currentRedFaction: window.gameCampaign.currentRedFaction,
+        currentBlueFaction: window.gameCampaign.currentBlueFaction,
+        selectedFaction: window.gameUI.screenData.playerFaction
+    });
+    
+    // Log the updated history
+    console.log("Updated game history:", window.gameCampaign.gameHistory);
+    
+    // Reset player health if necessary
+    if (sprite1 && sprite1.hitpoints <= 0) {
+        sprite1.hitpoints = sprite1.maxHitpoints;
+    }
+    
+    // Increment level number for the next level
+    window.gameCampaign.currentLevel++;
+    
+    // Switch to faction selection screen
+    window.gameUI.currentScreen = "factionSelect";
+    
+    // Clear player faction to force new selection
+    window.gameUI.screenData.playerFaction = null;
+    window.gameCampaign.selectedFaction = null;
+    
+    // Select new random factions for the next level
+    selectRandomFactions();
+    
+    console.log("Advancing to level", window.gameCampaign.currentLevel);
 };
 
 

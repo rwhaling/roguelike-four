@@ -117,5 +117,15 @@ export interface Campaign {
   currentRedFaction: string,
   currentBlueFaction: string,
   currentLevel: number,
+  gameHistory: CurrentLevel[]
+}
+
+export interface CurrentLevel {
+  currentLevel: number,
+  currentRedFaction: string,
+  redFactionReward: string,
+  currentBlueFaction: string,
+  blueFactionReward: string,
+  selectedFaction?: string,
   gameHistory: any[]
 }

@@ -6,6 +6,9 @@ window.gameCampaign = {
   currentRedFaction: "orc",
   currentBlueFaction: "undead",
   currentLevel: 1,
+  redFactionReward: "test",
+  blueFactionReward: "test", 
+  selectedFaction: null,
   gameHistory: []
 };
 
@@ -72,37 +75,74 @@ function GameModals() {
     return <GameOverScreen data={screenData} />;
   }
   
+  if (currentScreen === "levelVictory") {
+    return <LevelVictoryScreen data={screenData} />;
+  }
+  
+  if (currentScreen === "campaignVictory") {
+    return <CampaignVictoryScreen data={screenData} />;
+  }
+  
   // Return null when playing (no modal)
   return null;
 }
 
 function GameOverScreen({ data }) {
+  const isVictory = data.isVictory;
+  
   return (
-    <div className="game-modal game-over">
+    <div className={`game-modal ${isVictory ? 'game-victory' : 'game-over'}`}>
       <div className="modal-content">
-        <h2 className="text-4xl font-bold mb-4 text-white-600">{data.message}</h2>
-        {data.score > 0 && <p className="text-xl mb-6">Score: {data.score}</p>}
-        <button 
-          className="px-6 py-3 bg-red-600 hover:bg-white-700 text-white font-bold rounded-lg"
-          onClick={() => restartGame()}
-        >
-          Restart Game
-        </button>
+        <h2 className={`text-4xl font-bold mb-4 text-center ${isVictory ? 'text-green-600' : 'text-red-600'}`}>
+          {data.message}
+        </h2>
+        {data.score > 0 && <p className="text-xl mb-6 text-center">Score: {data.score}</p>}
+        
+        <div className="flex flex-col space-y-4 items-center">
+          {/* Retry current level button */}
+          <button 
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg w-64"
+            onClick={() => retryCurrentLevel()}
+          >
+            Retry Current Level
+          </button>
+          
+          {/* Start new campaign button */}
+          <button 
+            className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg w-64"
+            onClick={() => startNewCampaign()}
+          >
+            New Campaign
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-// Function to restart the game
-function restartGame() {
-  // Reset game UI state
-  window.gameUI.currentScreen = "playing";
+// Function to retry the current level
+function retryCurrentLevel() {
+  // Reset game UI state to faction selection
+  window.gameUI.currentScreen = "factionSelect";
   
-  // Call reset function in test.ts if it exists
-  if (typeof window.resetGame === "function") {
-    window.resetGame();
+  // Call retry function in test.ts if it exists
+  if (typeof window.retryCurrentLevel === "function") {
+    window.retryCurrentLevel();
   } else {
-    console.error("resetGame function not found in test.ts");
+    console.error("retryCurrentLevel function not found in test.ts");
+  }
+}
+
+// Function to start a new campaign
+function startNewCampaign() {
+  // Reset game UI state
+  window.gameUI.currentScreen = "factionSelect";
+  
+  // Call new campaign function in test.ts if it exists
+  if (typeof window.startNewCampaign === "function") {
+    window.startNewCampaign();
+  } else {
+    console.error("startNewCampaign function not found in test.ts");
   }
 }
 
@@ -577,9 +617,11 @@ function FactionSelectScreen() {
     }
   };
 
-  // Get current factions from campaign
+  // Get current factions and rewards directly from campaign
   const redFaction = window.gameCampaign.currentRedFaction;
   const blueFaction = window.gameCampaign.currentBlueFaction;
+  const redReward = window.gameCampaign.redFactionReward;
+  const blueReward = window.gameCampaign.blueFactionReward;
 
   // Styles for fortress sprites - using inline styles for compatibility
   const fortressStyle: React.CSSProperties = {
@@ -603,10 +645,27 @@ function FactionSelectScreen() {
     backgroundPosition: '-160px -352px' // 10,22 in a 16x16 grid
   };
 
+  // Get a list of previously used factions for display
+  const usedFactions = new Set<string>();
+  window.gameCampaign.gameHistory.forEach(level => {
+    usedFactions.add(level.currentRedFaction);
+    usedFactions.add(level.currentBlueFaction);
+  });
+  const usedFactionsList = Array.from(usedFactions).join(", ");
+
   return (
     <div className="game-modal faction-select">
       <div className="modal-content">
         <h2 className="text-4xl font-bold mb-6 text-center">Choose Your Faction</h2>
+        <p className="text-xl mb-6 text-center">Level {window.gameCampaign.currentLevel}</p>
+        
+        {/* Add history display */}
+        {window.gameCampaign.gameHistory.length > 0 && (
+          <p className="text-sm mb-4 text-center text-gray-600">
+            Previous factions: {usedFactionsList}<br/>
+            (Completed {window.gameCampaign.gameHistory.length} levels)
+          </p>
+        )}
         
         <div className="flex justify-center gap-8">
           <div 
@@ -614,7 +673,8 @@ function FactionSelectScreen() {
             onClick={() => selectFaction(redFaction)}
           >
             <h3 className="text-2xl font-bold text-red-700 mb-2">{redFaction.charAt(0).toUpperCase() + redFaction.slice(1)}</h3>
-            <p className="mb-4">Red warrior faction with strong melee units.</p>
+            <p className="mb-2">Red warrior faction with strong melee units.</p>
+            <p className="mb-4 text-sm font-semibold">Reward: {redReward}</p>
             <div className="text-center p-4 bg-red-200 rounded flex justify-center items-center" style={{ minHeight: '100px' }}>
               <div style={redFortressStyle}></div>
             </div>
@@ -625,7 +685,8 @@ function FactionSelectScreen() {
             onClick={() => selectFaction(blueFaction)}
           >
             <h3 className="text-2xl font-bold text-blue-700 mb-2">{blueFaction.charAt(0).toUpperCase() + blueFaction.slice(1)}</h3>
-            <p className="mb-4">Blue undead faction with necromantic powers.</p>
+            <p className="mb-2">Blue undead faction with necromantic powers.</p>
+            <p className="mb-4 text-sm font-semibold">Reward: {blueReward}</p>
             <div className="text-center p-4 bg-blue-200 rounded flex justify-center items-center" style={{ minHeight: '100px' }}>
               <div style={blueFortressStyle}></div>
             </div>
@@ -634,6 +695,67 @@ function FactionSelectScreen() {
       </div>
     </div>
   );
+}
+
+// Add the campaign victory screen component
+function CampaignVictoryScreen({ data }) {
+  return (
+    <div className="game-modal campaign-victory">
+      <div className="modal-content">
+        <h2 className="text-4xl font-bold mb-4 text-center text-yellow-600">CAMPAIGN VICTORY!</h2>
+        <p className="text-2xl mb-6 text-center">{data.message}</p>
+        {data.score > 0 && <p className="text-xl mb-2 text-center">Final Score: {data.score}</p>}
+        <p className="text-lg mb-6 text-center">Levels Completed: {data.totalLevels}</p>
+        
+        <div className="flex justify-center">
+          {/* Start new campaign button */}
+          <button 
+            className="px-8 py-4 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-lg text-xl"
+            onClick={() => startNewCampaign()}
+          >
+            Start New Campaign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Add the level victory screen component
+function LevelVictoryScreen({ data }) {
+  return (
+    <div className="game-modal level-victory">
+      <div className="modal-content">
+        <h2 className="text-4xl font-bold mb-4 text-center text-green-600">VICTORY!</h2>
+        <p className="text-2xl mb-6 text-center">{data.message}</p>
+        {data.score > 0 && <p className="text-xl mb-2 text-center">Level Score: {data.score}</p>}
+        <p className="text-lg mb-6 text-center">Level {window.gameCampaign.currentLevel} completed!</p>
+        
+        <div className="flex justify-center">
+          {/* Proceed to next level button */}
+          <button 
+            className="px-8 py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-lg text-xl"
+            onClick={() => proceedToNextLevel()}
+          >
+            Proceed to Next Level
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Function to proceed to the next level
+function proceedToNextLevel() {
+  // Reset game UI state to faction selection
+  window.gameUI.currentScreen = "factionSelect";
+  
+  // Call resetGame function in test.ts which handles advancing to next level
+  if (typeof window.resetGame === "function") {
+    window.resetGame();
+  } else {
+    console.error("resetGame function not found in test.ts");
+  }
 }
 
 // Main App component to organize the UI structure
@@ -699,9 +821,14 @@ declare global {
       currentRedFaction: string;
       currentBlueFaction: string;
       currentLevel: number;
+      redFactionReward: string;
+      blueFactionReward: string;
+      selectedFaction: string | null;
       gameHistory: any[];
     };
     resetGame?: () => void;
+    retryCurrentLevel?: () => void;
+    startNewCampaign?: () => void;
     startGameWithFaction?: (faction: string) => void;
   }
 }
