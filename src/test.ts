@@ -1306,21 +1306,31 @@ function initializeNpc(faction: string): Sprite {
     } else if (faction === "orc") {
         selectedSprite = orc_sprites[Math.floor(Math.random() * orc_sprites.length)];
         // selectedSprite = gryphon_sprites[Math.floor(Math.random() * gryphon_sprites.length)];
-
+    } else if (faction === "lizard") {
+        selectedSprite = lizard_sprites[Math.floor(Math.random() * lizard_sprites.length)];
+    } else if (faction === "siren") {
+        selectedSprite = siren_sprites[Math.floor(Math.random() * siren_sprites.length)];
+    } else if (faction === "dragon") {
+        selectedSprite = dragon_sprites[Math.floor(Math.random() * dragon_sprites.length)];
+    } else if (faction === "gryphon") {
+        selectedSprite = gryphon_sprites[Math.floor(Math.random() * gryphon_sprites.length)];
     } else {
         console.warn(`Unknown faction: ${faction}, defaulting to human`);
         selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
         faction = "human";
     }
     
-    // Define enemy factions based on this sprite's faction
+    // Define enemy factions based on this sprite's faction and the current campaign
     let enemyFactions: string[] = [];
-    if (faction === "orc") {
-        enemyFactions = ["undead", "human"];
-    } else if (faction === "undead") {
-        enemyFactions = ["orc", "human"];
-    } else if (faction === "human") {
-        enemyFactions = []; // Human NPCs are neutral
+    const redFaction = window.gameCampaign.currentRedFaction;
+    const blueFaction = window.gameCampaign.currentBlueFaction;
+
+    if (faction === redFaction) {
+        enemyFactions = [blueFaction]; // Red faction opposes blue faction
+    } else if (faction === blueFaction) {
+        enemyFactions = [redFaction]; // Blue faction opposes red faction
+    } else {
+        enemyFactions = []; // Other factions (like human) are neutral
     }
     
     // Create the NPC sprite
