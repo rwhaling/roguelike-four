@@ -1255,49 +1255,39 @@ let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
 let orc_sprites = [[4,9],[6,9],[3,10],[5,10],[7,10],[4,11],[6,11]]
 let human_sprites = [[9,15],[11,15],[13,15],[8,16],[10,16],[12,16],[9,17],[11,17]]
 
-function initializeSpritePosition(isPlayer = false, faction = "human"): Sprite {
+// Modified to only handle non-player entities
+function initializeSpritePosition(faction = "human"): Sprite {
     let rand_x, rand_y;
     let isValidPosition = false;
     let attempts = 0;
     const MAX_ATTEMPTS = 20;
     
-    // If it's the player, keep the original random placement
-    if (isPlayer) {
-        while (!isValidPosition && attempts < MAX_ATTEMPTS) {
-            rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 2)) + 1;
-            rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 2)) + 1;
-            isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
-            attempts++;
+    // For NPCs, place them along the edges but not on walls
+    while (!isValidPosition && attempts < MAX_ATTEMPTS) {
+        // Decide which edge to spawn on (0=top, 1=right, 2=bottom, 3=left)
+        const edge = Math.floor(Math.random() * 4);
+        
+        switch (edge) {
+            case 0: // Top edge
+                rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
+                rand_y = 1;
+                break;
+            case 1: // Right edge
+                rand_x = window.gameParams.mapWidth - 2;
+                rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
+                break;
+            case 2: // Bottom edge
+                rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
+                rand_y = window.gameParams.mapHeight - 2;
+                break;
+            case 3: // Left edge
+                rand_x = 1;
+                rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
+                break;
         }
-    } 
-    // For NPCs (enemies), place them along the edges but not on walls
-    else {
-        while (!isValidPosition && attempts < MAX_ATTEMPTS) {
-            // Decide which edge to spawn on (0=top, 1=right, 2=bottom, 3=left)
-            const edge = Math.floor(Math.random() * 4);
-            
-            switch (edge) {
-                case 0: // Top edge
-                    rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
-                    rand_y = 1;
-                    break;
-                case 1: // Right edge
-                    rand_x = window.gameParams.mapWidth - 2;
-                    rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
-                    break;
-                case 2: // Bottom edge
-                    rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
-                    rand_y = window.gameParams.mapHeight - 2;
-                    break;
-                case 3: // Left edge
-                    rand_x = 1;
-                    rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
-                    break;
-            }
-            
-            isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
-            attempts++;
-        }
+        
+        isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
+        attempts++;
     }
     
     if (!isValidPosition) {
@@ -1323,30 +1313,28 @@ function initializeSpritePosition(isPlayer = false, faction = "human"): Sprite {
     // Define enemy factions based on this sprite's faction
     let enemyFactions: string[] = [];
     if (faction === "orc") {
-        enemyFactions = isPlayer ? ["undead"] : ["undead", "human"];
+        enemyFactions = ["undead", "human"];
     } else if (faction === "undead") {
-        enemyFactions = isPlayer ? ["orc"] : ["orc", "human"];
+        enemyFactions = ["orc", "human"];
     } else if (faction === "human") {
-        enemyFactions = isPlayer ? ["orc", "undead"] : []; // Player can attack both, NPCs are neutral
+        enemyFactions = []; // NPCs are neutral
     }
     
     // Determine if this NPC should be a champion
     let isChampion = false;
-    if (!isPlayer) {
-        if (faction === "orc") {
-            // Use the new parameter for orc champion spawn chance for initial spawning
-            const spawnChance = window.gameParams.orcChampionSpawnChance / 100; // Convert to probability
-            if (Math.random() < spawnChance && orcChampions < window.gameParams.maxOrcChampions) {
-                isChampion = true;
-                orcChampions++;
-            }
-        } else if (faction === "undead") {
-            // Use the new parameter for undead champion spawn chance for initial spawning
-            const spawnChance = window.gameParams.undeadChampionSpawnChance / 100; // Convert to probability
-            if (Math.random() < spawnChance && undeadChampions < window.gameParams.maxUndeadChampions) {
-                isChampion = true;
-                undeadChampions++;
-            }
+    if (faction === "orc") {
+        // Use the new parameter for orc champion spawn chance for initial spawning
+        const spawnChance = window.gameParams.orcChampionSpawnChance / 100; // Convert to probability
+        if (Math.random() < spawnChance && orcChampions < window.gameParams.maxOrcChampions) {
+            isChampion = true;
+            orcChampions++;
+        }
+    } else if (faction === "undead") {
+        // Use the new parameter for undead champion spawn chance for initial spawning
+        const spawnChance = window.gameParams.undeadChampionSpawnChance / 100; // Convert to probability
+        if (Math.random() < spawnChance && undeadChampions < window.gameParams.maxUndeadChampions) {
+            isChampion = true;
+            undeadChampions++;
         }
     }
     
@@ -1361,29 +1349,20 @@ function initializeSpritePosition(isPlayer = false, faction = "human"): Sprite {
         prev_y: rand_y,
         animationEndTime: 250,
         restUntil: 0,
-        isPlayer: isPlayer,
+        isPlayer: false, // Always false since this function now only creates NPCs
         faction: faction,
-        enemyFactions: enemyFactions, // Add the enemy factions list
-        maxHitpoints: isPlayer ? 10 : (isChampion ? 5 : 1),
-        hitpoints: isPlayer ? 10 : (isChampion ? 5 : 1),
-        maxStamina: isPlayer ? 5 : (isChampion ? 2 : 0),
-        stamina: isPlayer ? 5 : (isChampion ? 2 : 0),
+        enemyFactions: enemyFactions,
+        maxHitpoints: isChampion ? 5 : 1,
+        hitpoints: isChampion ? 5 : 1,
+        maxStamina: isChampion ? 2 : 0,
+        stamina: isChampion ? 2 : 0,
         lastMoveTime: Date.now(),
-        movementDelay: isPlayer ? 0 : 200 + Math.floor(Math.random() * 400),
+        movementDelay: 200 + Math.floor(Math.random() * 400),
         isStructure: false,
         useBackgroundSpritesheet: false,
         isChampion: isChampion,
         takingDamage: false,
-        damageUntil: undefined,
-        // Add regeneration properties if it's the player
-        ...(isPlayer && {
-            healthRegenFrequency: 500, // Regenerate health every 500ms
-            healthRegenTimeElapsed: 0, // Initialize timer
-            healthRegenAmount: 1, // Regenerate 1 HP per cycle
-            staminaRegenFrequency: 1000, // Regenerate stamina every 1000ms
-            staminaRegenTimeElapsed: 0, // Initialize timer
-            staminaRegenAmount: 1 // Regenerate 1 stamina per cycle
-        })
+        damageUntil: undefined
     };
     
     // Add sprite to spatial hash
@@ -1850,7 +1829,7 @@ function initializePlayerWithAlliance(visualFaction: string, allianceFaction: st
         movementDelay: 0,
         isStructure: false,
         isChampion: false,
-        healthRegenFrequency: 500, // Regenerate health every 500ms
+        healthRegenFrequency: 1000, // Regenerate health every 500ms
         healthRegenTimeElapsed: 0, // Initialize timer
         healthRegenAmount: 1, // Regenerate 1 HP per cycle
         staminaRegenFrequency: 2000, // Regenerate stamina every 1000ms
@@ -1877,7 +1856,7 @@ function updateMaxOrcCount(newCount: number) {
     if (newCount > currentOrcCount) {
         // Add more orcs if the new max is higher
         for (let i = 0; i < newCount - currentOrcCount; i++) {
-            const npc = initializeSpritePosition(false, "orc");
+            const npc = initializeSpritePosition("orc");
             if (npc) {
                 npc.movementDelay = 200 + Math.floor(Math.random() * 400);
             }
@@ -1903,7 +1882,7 @@ function updateMaxUndeadCount(newCount: number) {
     if (newCount > currentUndeadCount) {
         // Add more undead if the new max is higher
         for (let i = 0; i < newCount - currentUndeadCount; i++) {
-            const npc = initializeSpritePosition(false, "undead");
+            const npc = initializeSpritePosition("undead");
             if (npc) {
                 npc.movementDelay = 200 + Math.floor(Math.random() * 400);
             }
@@ -1993,8 +1972,8 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     spriteMap.clear();
     allSprites = [];
 
-    // Initialize player sprite as human
-    sprite1 = initializeSpritePosition(true, "human");
+    // Initialize player sprite as human with neutral alliance
+    sprite1 = initializePlayerWithAlliance("human", "human");
     
     // Make sure player is first in the allSprites array
     allSprites[0] = sprite1;
