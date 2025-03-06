@@ -196,13 +196,16 @@ function spawnFortresses() {
 
 // Helper function to create a fortress
 function createFortress(x: number, y: number, faction: string): Sprite {
+  // Get faction names from campaign to determine team color
+  const redFaction = window.gameCampaign.currentRedFaction;
+  
   const fortress: Sprite = {
     x: x,
     y: y,
     visualX: x,
     visualY: y,
     sprite_x: 10,
-    sprite_y: faction === "orc" ? 21 : 22,
+    sprite_y: faction === redFaction ? 21 : 22, // Use sprite_y 21 for red team, 22 for blue team
     prev_x: x,
     prev_y: y,
     animationEndTime: 0,
@@ -210,7 +213,7 @@ function createFortress(x: number, y: number, faction: string): Sprite {
     isPlayer: false,
     isStructure: true, // Mark as structure (immobile)
     faction: faction,
-    enemyFactions: faction === "orc" ? ["undead", "human"] : ["orc", "human"],
+    enemyFactions: faction === redFaction ? [window.gameCampaign.currentBlueFaction] : [redFaction],
     maxHitpoints: 20, // Fortresses have more hitpoints
     hitpoints: 20,
     maxStamina: 0,
@@ -495,11 +498,19 @@ function countNpcsByFaction() {
     const counts = {
         orc: 0,
         undead: 0,
-        human: 0
+        human: 0,
+        lizard: 0,
+        siren: 0,
+        dragon: 0,
+        gryphon: 0
     };
     
     for (const sprite of allSprites) {
         if (!sprite.isPlayer && sprite.faction) {
+            // If this faction isn't in our counts object yet, initialize it
+            if (counts[sprite.faction] === undefined) {
+                counts[sprite.faction] = 0;
+            }
             counts[sprite.faction]++;
         }
     }
@@ -1935,6 +1946,9 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
         return;
     }
 
+    // Initialize game with random factions
+    initializeGame();
+    
     const canvas = document.createElement("canvas");
     
     function resizeCanvas() {
@@ -2176,92 +2190,101 @@ function handleKeyUp(event: KeyboardEvent) {
     }
 }
 
-// Update checkGameEndConditions to handle faction-based win/loss conditions
+// Update checkGameEndConditions to handle dynamic faction-based win/loss conditions
 function checkGameEndConditions() {
     // Get player's faction from UI state
     const playerFaction = window.gameUI.screenData.playerFaction || "human";
     
+    // Get current campaign factions instead of hardcoded orc/undead
+    const redFaction = window.gameCampaign.currentRedFaction;
+    const blueFaction = window.gameCampaign.currentBlueFaction;
+    
     // Check if any fortress has been destroyed
-    const orcFortress = fortresses.find(f => f.faction === "orc");
-    const undeadFortress = fortresses.find(f => f.faction === "undead");
+    const redFortress = fortresses.find(f => f.faction === redFaction);
+    const blueFortress = fortresses.find(f => f.faction === blueFaction);
     
     // Different win/loss conditions based on player faction
-    if (playerFaction === "orc") {
-        // Player is Orc - lose if Orc fortress destroyed, win if Undead fortress destroyed
-        if (orcFortress && orcFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
-            console.log("Game over - Orc fortress destroyed!");
+    if (playerFaction === redFaction) {
+        // Player is Red faction - lose if Red fortress destroyed, win if Blue fortress destroyed
+        if (redFortress && redFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log(`Game over - ${redFaction} fortress destroyed!`);
             
             // Set game over screen with appropriate message
             window.gameUI.currentScreen = "gameOver";
             window.gameUI.screenData = {
                 message: "Game Over! Your fortress was destroyed.",
                 score: calculateScore(),
-                playerFaction: playerFaction
+                playerFaction: playerFaction,
+                isVictory: false
             };
         }
         
         // Victory if enemy fortress is destroyed
-        if (undeadFortress && undeadFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
-            console.log("Victory - Undead fortress destroyed!");
+        if (blueFortress && blueFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log(`Victory - ${blueFaction} fortress destroyed!`);
             
             // Set win screen with appropriate message
             window.gameUI.currentScreen = "gameOver";
             window.gameUI.screenData = {
                 message: "You Win! The enemy fortress is destroyed.",
                 score: calculateScore(),
-                playerFaction: playerFaction
+                playerFaction: playerFaction,
+                isVictory: true
             };
         }
-    } else if (playerFaction === "undead") {
-        // Player is Undead - lose if Undead fortress destroyed, win if Orc fortress destroyed
-        if (undeadFortress && undeadFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
-            console.log("Game over - Undead fortress destroyed!");
+    } else if (playerFaction === blueFaction) {
+        // Player is Blue faction - lose if Blue fortress destroyed, win if Red fortress destroyed
+        if (blueFortress && blueFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log(`Game over - ${blueFaction} fortress destroyed!`);
             
             // Set game over screen with appropriate message
             window.gameUI.currentScreen = "gameOver";
             window.gameUI.screenData = {
                 message: "Game Over! Your fortress was destroyed.",
                 score: calculateScore(),
-                playerFaction: playerFaction
+                playerFaction: playerFaction,
+                isVictory: false
             };
         }
         
         // Victory if enemy fortress is destroyed
-        if (orcFortress && orcFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
-            console.log("Victory - Orc fortress destroyed!");
+        if (redFortress && redFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log(`Victory - ${redFaction} fortress destroyed!`);
             
             // Set win screen with appropriate message
             window.gameUI.currentScreen = "gameOver";
             window.gameUI.screenData = {
                 message: "You Win! The enemy fortress is destroyed.",
                 score: calculateScore(),
-                playerFaction: playerFaction
+                playerFaction: playerFaction,
+                isVictory: true
             };
         }
     } else {
-        // Original logic for human player (neutral)
-        if (orcFortress && orcFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
-            console.log("Game over - Orc fortress destroyed!");
+        // Player is neutral (human) - we'll show a message for either fortress being destroyed
+        if (redFortress && redFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log(`Game event - ${redFaction} fortress destroyed!`);
             
             // Set game over screen with appropriate message
             window.gameUI.currentScreen = "gameOver";
             window.gameUI.screenData = {
-                message: "Game Over! The orc fortress was destroyed.",
+                message: `The ${redFaction} fortress was destroyed.`,
                 score: calculateScore(),
-                playerFaction: playerFaction
+                playerFaction: playerFaction,
+                isVictory: playerFaction !== redFaction
             };
         }
         
-        // Victory if enemy (undead) fortress is destroyed
-        if (undeadFortress && undeadFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
-            console.log("Victory - Undead fortress destroyed!");
+        if (blueFortress && blueFortress.hitpoints <= 0 && window.gameUI.currentScreen === "playing") {
+            console.log(`Game event - ${blueFaction} fortress destroyed!`);
             
-            // Set win screen with appropriate message
+            // Set game over screen with appropriate message
             window.gameUI.currentScreen = "gameOver";
             window.gameUI.screenData = {
-                message: "You Win! The undead fortress is destroyed.",
+                message: `The ${blueFaction} fortress was destroyed.`,
                 score: calculateScore(),
-                playerFaction: playerFaction
+                playerFaction: playerFaction,
+                isVictory: playerFaction !== blueFaction
             };
         }
     }
@@ -2276,6 +2299,69 @@ window.startGameWithFaction = function(faction: string) {
     
     // Reset game state, but always give player a human sprite
     resetSpritePositions("human", faction);
+};
+
+// Function to randomly select two factions for the campaign
+function selectRandomFactions() {
+    const availableFactions = ["undead", "orc", "lizard", "siren", "dragon", "gryphon"];
+    
+    // Shuffle the array using Fisher-Yates algorithm
+    for (let i = availableFactions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availableFactions[i], availableFactions[j]] = [availableFactions[j], availableFactions[i]];
+    }
+    
+    // Take the first two factions from the shuffled array
+    const redFaction = availableFactions[0];
+    const blueFaction = availableFactions[1];
+    
+    console.log(`Randomly selected factions: Red=${redFaction}, Blue=${blueFaction}`);
+    
+    // Update the campaign with the selected factions
+    window.gameCampaign.currentRedFaction = redFaction;
+    window.gameCampaign.currentBlueFaction = blueFaction;
+    
+    return { redFaction, blueFaction };
+}
+
+// Call this function when initializing the game or resetting
+function initializeGame() {
+    // Initialize the campaign if it doesn't exist
+    if (!window.gameCampaign) {
+        window.gameCampaign = {
+            currentRedFaction: "orc", // Default, will be overwritten
+            currentBlueFaction: "undead", // Default, will be overwritten
+            currentLevel: 1,
+            gameHistory: []
+        };
+    }
+    
+    // Select random factions
+    selectRandomFactions();
+    
+    // Continue with game initialization...
+    // This would include resetting sprite positions, etc.
+}
+
+// Update resetGame function to call initializeGame
+window.resetGame = function() {
+    console.log("Resetting game after Game Over...");
+    
+    // Reset player health if they died
+    if (sprite1 && sprite1.hitpoints <= 0) {
+        sprite1.hitpoints = sprite1.maxHitpoints;
+    }
+    
+    // Switch to faction selection screen
+    window.gameUI.currentScreen = "factionSelect";
+    
+    // Clear player faction to force new selection
+    window.gameUI.screenData.playerFaction = null;
+    
+    // Select new random factions for the next game
+    selectRandomFactions();
+    
+    console.log("Game reset complete - returning to faction select screen");
 };
 
 
