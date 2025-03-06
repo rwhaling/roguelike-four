@@ -543,102 +543,71 @@ function countNpcsByFaction() {
     return counts;
 }
 
-// New function to respawn NPC adjacent to its faction's fortress
-function respawnNpcAdjacentToFortress(faction: string): Sprite | null {
-    // Find the fortress for this faction
+// Update respawnNpcAdjacentToFortress if it exists to use our new functions
+function respawnNpcAdjacentToFortress(faction: string, forceChampion = false): Sprite {
+    // Find the fortress of this faction
     const fortress = fortresses.find(f => f.faction === faction);
     if (!fortress) {
-        console.warn(`No fortress found for faction: ${faction}`);
+        console.warn(`No ${faction} fortress found for spawning`);
         return null;
     }
     
-    // Define all 8 possible adjacent positions (including diagonals)
-    const adjacentPositions = [
-        { x: fortress.x - 1, y: fortress.y - 1 }, // top-left
-        { x: fortress.x,     y: fortress.y - 1 }, // top
-        { x: fortress.x + 1, y: fortress.y - 1 }, // top-right
-        { x: fortress.x - 1, y: fortress.y },     // left
-        { x: fortress.x + 1, y: fortress.y },     // right
-        { x: fortress.x - 1, y: fortress.y + 1 }, // bottom-left
-        { x: fortress.x,     y: fortress.y + 1 }, // bottom
-        { x: fortress.x + 1, y: fortress.y + 1 }  // bottom-right
+    // Get potential spawn positions around the fortress
+    const spawnPositions = [
+        {x: fortress.x - 1, y: fortress.y},
+        {x: fortress.x + 1, y: fortress.y},
+        {x: fortress.x, y: fortress.y - 1},
+        {x: fortress.x, y: fortress.y + 1},
+        {x: fortress.x - 1, y: fortress.y - 1},
+        {x: fortress.x + 1, y: fortress.y + 1},
+        {x: fortress.x - 1, y: fortress.y + 1},
+        {x: fortress.x + 1, y: fortress.y - 1}
     ];
     
-    // Shuffle the positions array for randomness
-    for (let i = adjacentPositions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [adjacentPositions[i], adjacentPositions[j]] = [adjacentPositions[j], adjacentPositions[i]];
+    // Filter out occupied positions
+    const availablePositions = spawnPositions.filter(pos => 
+        !isPositionOccupied(pos.x, pos.y, null) && 
+        pos.x > 0 && pos.x < window.gameParams.mapWidth - 1 &&
+        pos.y > 0 && pos.y < window.gameParams.mapHeight - 1
+    );
+    
+    if (availablePositions.length === 0) {
+        console.warn(`No available spawn positions around ${faction} fortress`);
+        return null;
     }
     
-    // Try each adjacent position until finding a valid one
-    for (const pos of adjacentPositions) {
-        // Check if position is within map bounds and not occupied
-        if (pos.x > 0 && pos.x < window.gameParams.mapWidth - 1 &&
-            pos.y > 0 && pos.y < window.gameParams.mapHeight - 1 &&
-            !isPositionOccupied(pos.x, pos.y, null)) {
-            
-            // Determine if this should be a champion based on spawn chance parameter
-            let isChampion = false;
-            if (faction === "orc") {
-                // Use the new parameter for orc champion spawn chance
-                const spawnChance = window.gameParams.orcChampionSpawnChance / 100; // Convert to probability
-                if (Math.random() < spawnChance && orcChampions < window.gameParams.maxOrcChampions) {
-                    isChampion = true;
-                    orcChampions++;
-                    console.log(`Respawned an Orc Champion! Current Orc champions: ${orcChampions}/${window.gameParams.maxOrcChampions}`);
-                }
-            } else if (faction === "undead") {
-                // Use the new parameter for undead champion spawn chance
-                const spawnChance = window.gameParams.undeadChampionSpawnChance / 100; // Convert to probability
-                if (Math.random() < spawnChance && undeadChampions < window.gameParams.maxUndeadChampions) {
-                    isChampion = true;
-                    undeadChampions++;
-                    console.log(`Respawned an Undead Champion! Current Undead champions: ${undeadChampions}/${window.gameParams.maxUndeadChampions}`);
-                }
-            }
-            
-            // Select appropriate sprite array based on faction
-            let spriteOptions = faction === "orc" ? orc_sprites : undead_sprites;
-            let selectedSprite = spriteOptions[Math.floor(Math.random() * spriteOptions.length)];
-            
-            // Create the sprite with the given position
-            const sprite: Sprite = {
-                x: pos.x,
-                y: pos.y,
-                visualX: pos.x,
-                visualY: pos.y,
-                sprite_x: selectedSprite[0],
-                sprite_y: selectedSprite[1],
-                prev_x: pos.x,
-                prev_y: pos.y,
-                animationEndTime: 250,
-                restUntil: 0,
-                isPlayer: false,
-                faction: faction,
-                enemyFactions: faction === "orc" ? ["undead"] : ["orc"],
-                maxHitpoints: isChampion ? 5 : 1,
-                hitpoints: isChampion ? 5 : 1,
-                maxStamina: isChampion ? 2 : 0,
-                stamina: isChampion ? 2 : 0,        
-                lastMoveTime: Date.now(),
-                movementDelay: 200 + Math.floor(Math.random() * 400),
-                isStructure: false,
-                useBackgroundSpritesheet: false,
-                isChampion: isChampion,
-                takingDamage: false,
-                damageUntil: undefined
-            };
-            
-            // Add sprite to spatial hash and sprites array
-            spriteMap.add(sprite);
-            allSprites.push(sprite);
-            
-            return sprite;
+    // Choose a random available position
+    const spawnPos = availablePositions[Math.floor(Math.random() * availablePositions.length)];
+    
+    // Determine if this should be a champion spawn
+    let newSprite: Sprite;
+    
+    if (forceChampion) {
+        // Force champion spawn if requested
+        if ((faction === "orc" && orcChampions < window.gameParams.maxOrcChampions) ||
+            (faction === "undead" && undeadChampions < window.gameParams.maxUndeadChampions)) {
+            newSprite = initializeChampion(faction);
+        } else {
+            console.warn(`Cannot spawn ${faction} champion: maximum reached`);
+            newSprite = initializeNpc(faction);
         }
+    } else {
+        // Use the normal chance-based spawning
+        newSprite = initializeSpritePosition(faction);
     }
     
-    console.warn(`Could not find valid position adjacent to ${faction} fortress`);
-    return null;
+    if (newSprite) {
+        // Update position to the chosen spawn location
+        spriteMap.updatePosition(newSprite, spawnPos.x, spawnPos.y);
+        newSprite.x = spawnPos.x;
+        newSprite.y = spawnPos.y;
+        newSprite.visualX = spawnPos.x;
+        newSprite.visualY = spawnPos.y;
+        newSprite.prev_x = spawnPos.x;
+        newSprite.prev_y = spawnPos.y;
+    }
+    
+    return newSprite;
 }
 
 // Modify the checkRespawns function to check fortress status before spawning
@@ -1255,8 +1224,8 @@ let undead_sprites = [[7,2],[9,2],[6,3],[8,3],[10,3]]
 let orc_sprites = [[4,9],[6,9],[3,10],[5,10],[7,10],[4,11],[6,11]]
 let human_sprites = [[9,15],[11,15],[13,15],[8,16],[10,16],[12,16],[9,17],[11,17]]
 
-// Modified to only handle non-player entities
-function initializeSpritePosition(faction = "human"): Sprite {
+// Function to initialize a regular NPC (grunt)
+function initializeNpc(faction: string): Sprite {
     let rand_x, rand_y;
     let isValidPosition = false;
     let attempts = 0;
@@ -1291,7 +1260,7 @@ function initializeSpritePosition(faction = "human"): Sprite {
     }
     
     if (!isValidPosition) {
-        console.warn("Could not find a valid position for sprite after multiple attempts");
+        console.warn("Could not find a valid position for NPC after multiple attempts");
         return null;
     }
     
@@ -1317,27 +1286,10 @@ function initializeSpritePosition(faction = "human"): Sprite {
     } else if (faction === "undead") {
         enemyFactions = ["orc", "human"];
     } else if (faction === "human") {
-        enemyFactions = []; // NPCs are neutral
+        enemyFactions = []; // Human NPCs are neutral
     }
     
-    // Determine if this NPC should be a champion
-    let isChampion = false;
-    if (faction === "orc") {
-        // Use the new parameter for orc champion spawn chance for initial spawning
-        const spawnChance = window.gameParams.orcChampionSpawnChance / 100; // Convert to probability
-        if (Math.random() < spawnChance && orcChampions < window.gameParams.maxOrcChampions) {
-            isChampion = true;
-            orcChampions++;
-        }
-    } else if (faction === "undead") {
-        // Use the new parameter for undead champion spawn chance for initial spawning
-        const spawnChance = window.gameParams.undeadChampionSpawnChance / 100; // Convert to probability
-        if (Math.random() < spawnChance && undeadChampions < window.gameParams.maxUndeadChampions) {
-            isChampion = true;
-            undeadChampions++;
-        }
-    }
-    
+    // Create the NPC sprite
     const sprite: Sprite = {
         x: rand_x,
         y: rand_y,
@@ -1349,18 +1301,18 @@ function initializeSpritePosition(faction = "human"): Sprite {
         prev_y: rand_y,
         animationEndTime: 250,
         restUntil: 0,
-        isPlayer: false, // Always false since this function now only creates NPCs
+        isPlayer: false,
         faction: faction,
         enemyFactions: enemyFactions,
-        maxHitpoints: isChampion ? 5 : 1,
-        hitpoints: isChampion ? 5 : 1,
-        maxStamina: isChampion ? 2 : 0,
-        stamina: isChampion ? 2 : 0,
+        maxHitpoints: 1,
+        hitpoints: 1,
+        maxStamina: 0,
+        stamina: 0,
         lastMoveTime: Date.now(),
         movementDelay: 200 + Math.floor(Math.random() * 400),
         isStructure: false,
         useBackgroundSpritesheet: false,
-        isChampion: isChampion,
+        isChampion: false,
         takingDamage: false,
         damageUntil: undefined
     };
@@ -1370,6 +1322,138 @@ function initializeSpritePosition(faction = "human"): Sprite {
     allSprites.push(sprite);
     
     return sprite;
+}
+
+// Function to initialize a champion NPC
+function initializeChampion(faction: string): Sprite {
+    let rand_x, rand_y;
+    let isValidPosition = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20;
+    
+    // For champions, place them along the edges but not on walls
+    while (!isValidPosition && attempts < MAX_ATTEMPTS) {
+        // Decide which edge to spawn on (0=top, 1=right, 2=bottom, 3=left)
+        const edge = Math.floor(Math.random() * 4);
+        
+        switch (edge) {
+            case 0: // Top edge
+                rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
+                rand_y = 1;
+                break;
+            case 1: // Right edge
+                rand_x = window.gameParams.mapWidth - 2;
+                rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
+                break;
+            case 2: // Bottom edge
+                rand_x = Math.floor(Math.random() * (window.gameParams.mapWidth - 4)) + 2;
+                rand_y = window.gameParams.mapHeight - 2;
+                break;
+            case 3: // Left edge
+                rand_x = 1;
+                rand_y = Math.floor(Math.random() * (window.gameParams.mapHeight - 4)) + 2;
+                break;
+        }
+        
+        isValidPosition = !isPositionOccupied(rand_x, rand_y, null);
+        attempts++;
+    }
+    
+    if (!isValidPosition) {
+        console.warn("Could not find a valid position for champion after multiple attempts");
+        return null;
+    }
+    
+    let selectedSprite;
+    
+    // Choose sprite based on faction
+    if (faction === "human") {
+        selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
+    } else if (faction === "undead") {
+        selectedSprite = undead_sprites[Math.floor(Math.random() * undead_sprites.length)];
+    } else if (faction === "orc") {
+        selectedSprite = orc_sprites[Math.floor(Math.random() * orc_sprites.length)];
+    } else {
+        console.warn(`Unknown faction: ${faction}, defaulting to human`);
+        selectedSprite = human_sprites[Math.floor(Math.random() * human_sprites.length)];
+        faction = "human";
+    }
+    
+    // Define enemy factions based on this sprite's faction
+    let enemyFactions: string[] = [];
+    if (faction === "orc") {
+        enemyFactions = ["undead", "human"];
+        orcChampions++; // Increment orc champion counter
+    } else if (faction === "undead") {
+        enemyFactions = ["orc", "human"];
+        undeadChampions++; // Increment undead champion counter
+    } else if (faction === "human") {
+        enemyFactions = []; // Human NPCs are neutral
+    }
+    
+    // Create the champion sprite with enhanced attributes
+    const sprite: Sprite = {
+        x: rand_x,
+        y: rand_y,
+        visualX: rand_x,
+        visualY: rand_y,
+        sprite_x: selectedSprite[0],
+        sprite_y: selectedSprite[1],
+        prev_x: rand_x,
+        prev_y: rand_y,
+        animationEndTime: 250,
+        restUntil: 0,
+        isPlayer: false,
+        faction: faction,
+        enemyFactions: enemyFactions,
+        maxHitpoints: 5, // Champions have more health
+        hitpoints: 5,
+        maxStamina: 2, // Champions have stamina for special abilities
+        stamina: 2,
+        lastMoveTime: Date.now(),
+        movementDelay: 200 + Math.floor(Math.random() * 400),
+        isStructure: false,
+        useBackgroundSpritesheet: false,
+        isChampion: true, // Mark as champion
+        takingDamage: false,
+        damageUntil: undefined,
+        // Champions can also regenerate stamina
+        staminaRegenFrequency: 3000, // Regenerate stamina every 3 seconds
+        staminaRegenTimeElapsed: 0,
+        staminaRegenAmount: 1
+    };
+    
+    // Add sprite to spatial hash
+    spriteMap.add(sprite);
+    allSprites.push(sprite);
+    
+    return sprite;
+}
+
+// Now let's update the original initializeSpritePosition function to use our new functions
+function initializeSpritePosition(faction = "human"): Sprite {
+    // Determine if this NPC should be a champion
+    let isChampion = false;
+    if (faction === "orc") {
+        // Use the parameter for orc champion spawn chance
+        const spawnChance = window.gameParams.orcChampionSpawnChance / 100; // Convert to probability
+        if (Math.random() < spawnChance && orcChampions < window.gameParams.maxOrcChampions) {
+            isChampion = true;
+        }
+    } else if (faction === "undead") {
+        // Use the parameter for undead champion spawn chance
+        const spawnChance = window.gameParams.undeadChampionSpawnChance / 100; // Convert to probability
+        if (Math.random() < spawnChance && undeadChampions < window.gameParams.maxUndeadChampions) {
+            isChampion = true;
+        }
+    }
+    
+    // Call the appropriate initialization function
+    if (isChampion) {
+        return initializeChampion(faction);
+    } else {
+        return initializeNpc(faction);
+    }
 }
 
 let display: WebGLDisplay;
