@@ -1562,30 +1562,30 @@ function applyDamage(attacker: Sprite, target: Sprite, amount: number = 1, isAre
     
     // Trigger damage animation
     triggerDamageAnimation(target, amount);
+    if (!isAreaAttack) {
+        let randomParticleId = Math.floor(Math.random() * 1000000);
 
-    let randomParticleId = Math.floor(Math.random() * 1000000);
+        let newParticle = {x: target.x, y: target.y, visualX: target.x, visualY: target.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
+            colorSwapR: 1.0,
+            colorSwapG: 0.0,
+            colorSwapB: 0.0,
+            colorSwapA: 1.0,
+            particleId: randomParticleId
+        };
 
-    let newParticle = {x: target.x, y: target.y, visualX: target.x, visualY: target.y, sprite_x: 15, sprite_y: 0, prev_x: 8, prev_y: 8, animationEndTime: 0, restUntil: 0, 
-        colorSwapR: 1.0,
-        colorSwapG: 0.0,
-        colorSwapB: 0.0,
-        colorSwapA: 1.0,
-        particleId: randomParticleId
-    };
-
-    damageParticles.push(newParticle);
-    gsap.to(newParticle, {
-        duration: 0.30,
-        ease: "power1.inOut",
-        repeat: 0,
-        yoyo: true,
-        colorSwapB: 1.0,
-        onComplete: () => {
-            console.log("animation complete?");
-            damageParticles = damageParticles.filter(p => p.particleId !== randomParticleId);
-        }
-    });
-
+        damageParticles.push(newParticle);
+        gsap.to(newParticle, {
+            duration: 0.30,
+            ease: "power1.inOut",
+            repeat: 0,
+            yoyo: true,
+            colorSwapB: 1.0,
+            onComplete: () => {
+                console.log("animation complete?");
+                damageParticles = damageParticles.filter(p => p.particleId !== randomParticleId);
+            }
+        });
+    }
 
     // console.log(`${target.faction} sprite took ${amount} damage! Hitpoints: ${target.hitpoints}/${target.maxHitpoints}`);
     
