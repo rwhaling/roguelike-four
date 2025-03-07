@@ -1651,6 +1651,42 @@ function draw_frame(timestamp: number) {
             }        
         }
         
+        // Add stamina bar for sprites that have stamina
+        if (sprite.stamina < sprite.maxStamina) {
+            let staminaPercent = sprite.stamina / sprite.maxStamina;
+            let staminaBarWidth = 1.5 * staminaPercent;
+            let staminaBarXOffset = -0.25;
+            let staminaBarYOffset = -0.45; // Position above health bar
+            let staminaBarHeight = 0.2;
+            
+            // Draw background/empty stamina bar (gray)
+            display.drawRect(
+                15, 0, // Use a blank/empty sprite
+                spritePos.x + staminaBarXOffset, 
+                spritePos.y + staminaBarYOffset,
+                1.5, // Full width for background
+                staminaBarHeight,
+                camera_pos_x,
+                camera_pos_y,
+                true, // Use bg tileset for solid color
+                [0.3, 0.3, 0.3, 0.7] // Dark gray with transparency
+            );
+            
+            // Draw current stamina bar (blue)
+            if (staminaBarWidth > 0) {
+                display.drawRect(
+                    15, 0, // Use a blank/empty sprite
+                    spritePos.x + staminaBarXOffset, 
+                    spritePos.y + staminaBarYOffset,
+                    staminaBarWidth, // Width based on current stamina
+                    staminaBarHeight,
+                    camera_pos_x,
+                    camera_pos_y,
+                    true, // Use bg tileset for solid color
+                    [0.0, 0.0, 1.0, 0.9] // Blue color for stamina
+                );
+            }
+        }
     }
     
     // Process and draw dying sprites
@@ -1859,8 +1895,8 @@ function initializePlayerWithAlliance(visualFaction: string, allianceFaction: st
         enemyFactions: allianceFaction === window.gameCampaign.currentRedFaction ? [window.gameCampaign.currentBlueFaction] : [window.gameCampaign.currentRedFaction], // Enemies based on alliance
         maxHitpoints: 10,
         hitpoints: 10,
-        maxStamina: 2,
-        stamina: 2,
+        maxStamina: 4,
+        stamina: 4,
         lastMoveTime: 0,
         movementDelay: 0,
         isStructure: false,
@@ -2021,23 +2057,27 @@ async function setup(fgTilesetBlobUrl: string, bgTilesetBlobUrl: string | null) 
     console.log("About to spawn fortresses...");
     spawnFortresses();
     
-    // Initialize orcs - with REDUCED initial count since no alliance chosen yet
-    const maxOrcCount = window.gameParams.maxOrcCount || 5;
-    const initialOrcCount = Math.ceil(maxOrcCount / 2); // Only spawn half initially
-    console.log(`Spawning ${initialOrcCount} initial orcs around their fortress...`);
-    for (let i = 0; i < initialOrcCount; i++) {
-        const npc = respawnNpcAdjacentToFortress("orc");
+    // Get current faction names from campaign
+    const redFaction = window.gameCampaign.currentRedFaction;
+    const blueFaction = window.gameCampaign.currentBlueFaction;
+
+    // Initialize red faction units
+    const maxRedCount = window.gameParams.maxRedCount || 5;
+    const initialRedCount = Math.ceil(maxRedCount / 2); // Only spawn half initially
+    console.log(`Spawning ${initialRedCount} initial ${redFaction} units around their fortress...`);
+    for (let i = 0; i < initialRedCount; i++) {
+        const npc = respawnNpcAdjacentToFortress(redFaction);
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
     }
     
-    // Initialize undead - with REDUCED initial count since no alliance chosen yet
-    const maxUndeadCount = window.gameParams.maxUndeadCount || 5;
-    const initialUndeadCount = Math.ceil(maxUndeadCount / 2); // Only spawn half initially
-    console.log(`Spawning ${initialUndeadCount} initial undead around their fortress...`);
-    for (let i = 0; i < initialUndeadCount; i++) {
-        const npc = respawnNpcAdjacentToFortress("undead");
+    // Initialize blue faction units
+    const maxBlueCount = window.gameParams.maxBlueCount || 5;
+    const initialBlueCount = Math.ceil(maxBlueCount / 2); // Only spawn half initially
+    console.log(`Spawning ${initialBlueCount} initial ${blueFaction} units around their fortress...`);
+    for (let i = 0; i < initialBlueCount; i++) {
+        const npc = respawnNpcAdjacentToFortress(blueFaction);
         if (npc) {
             npc.movementDelay = 200 + Math.floor(Math.random() * 400);
         }
@@ -2120,14 +2160,14 @@ declare global {
       mapWidth: number;
       mapHeight: number;
       mapSize: number;
-      maxRedCount: number;      // Was maxOrcCount
-      maxBlueCount: number;     // Was maxUndeadCount
-      redRespawnRate: number;   // Was orcRespawnRate
-      blueRespawnRate: number;  // Was undeadRespawnRate
-      maxRedChampions: number;  // Was maxOrcChampions
-      maxBlueChampions: number; // Was maxUndeadChampions
-      redChampionSpawnChance: number;  // Was orcChampionSpawnChance
-      blueChampionSpawnChance: number; // Was undeadChampionSpawnChance
+      maxRedCount: number;
+      maxBlueCount: number;
+      redRespawnRate: number;
+      blueRespawnRate: number;
+      maxRedChampions: number;
+      maxBlueChampions: number;
+      redChampionSpawnChance: number;
+      blueChampionSpawnChance: number;
       playerAttackCooldown?: number;
       npcAttackCooldown?: number;
     };
@@ -2146,6 +2186,8 @@ declare global {
       currentLevel: number;
       gameHistory: any[];
       selectedFaction: string | null;
+      redFactionReward: string;
+      blueFactionReward: string;
     };
     resetGame?: () => void; 
     startGameWithFaction?: (faction: string) => void;
@@ -2376,13 +2418,14 @@ function advanceToNextLevel() {
 function showCampaignVictory() {
     console.log("Campaign complete! Showing victory screen");
     
-    // Set campaign victory screen
+    // Set campaign victory screen - add playerFaction to match the type definition
     window.gameUI.currentScreen = "campaignVictory";
     window.gameUI.screenData = {
         message: "Congratulations! You have completed the campaign!",
         score: calculateScore(),
         totalLevels: window.gameCampaign.currentLevel,
-        isVictory: true
+        isVictory: true,
+        playerFaction: window.gameUI.screenData.playerFaction // Preserve the player's faction
     };
 }
 
@@ -2455,7 +2498,9 @@ function initializeGame() {
             currentBlueFaction: "undead", // Default, will be overwritten
             currentLevel: 1,
             gameHistory: [],
-            selectedFaction: null
+            selectedFaction: null,
+            redFactionReward: "",  // Add this property
+            blueFactionReward: ""  // Add this property
         };
     }
     
@@ -2542,7 +2587,9 @@ window.resetGame = function() {
         currentLevel: window.gameCampaign.currentLevel,
         currentRedFaction: window.gameCampaign.currentRedFaction,
         currentBlueFaction: window.gameCampaign.currentBlueFaction,
-        selectedFaction: window.gameUI.screenData.playerFaction
+        selectedFaction: window.gameUI.screenData.playerFaction,
+        redFactionReward: "",  // Add this property
+        blueFactionReward: ""  // Add this property
     });
     
     // Log the updated history
