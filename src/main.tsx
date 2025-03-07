@@ -6,11 +6,25 @@ window.gameCampaign = {
   currentRedFaction: "orc",
   currentBlueFaction: "undead",
   currentLevel: 1,
-  redFactionReward: "test",
-  blueFactionReward: "test", 
+  redFactionReward: "SLAM",  // Will be set from factionRewards map
+  blueFactionReward: "BEAM", // Will be set from factionRewards map
   selectedFaction: null,
+  // Add faction rewards mapping
+  factionRewards: {
+    "dragon": "BURN",
+    "undead": "BEAM",
+    "orc": "SLAM",
+    "gryphon": "GALE",
+    "lizard": "SLASH",
+    "siren": "FREEZE"
+  },
+  selectedFactionRewards: [], // Track rewards selected throughout campaign
   gameHistory: []
 };
+
+// Update rewards from the faction map
+window.gameCampaign.redFactionReward = window.gameCampaign.factionRewards[window.gameCampaign.currentRedFaction] || "UNKNOWN";
+window.gameCampaign.blueFactionReward = window.gameCampaign.factionRewards[window.gameCampaign.currentBlueFaction] || "UNKNOWN";
 
 // Create a global object to allow test.ts to access and modify game parameters
 // This is the single source of truth for initialization
@@ -284,6 +298,41 @@ function GameParametersApp() {
                 value={stats.playerStamina} 
                 className="text-sm bg-gray-100 px-2 py-1 rounded read-only:text-gray-600 w-16" 
               />
+            </div>
+          </div>
+          
+          {/* Special Moves */}
+          <div className="col-span-2 mt-4">
+            <h4 className="font-medium text-sm text-gray-600 mb-2">Special Attacks</h4>
+            <div className="grid grid-cols-1 gap-2">
+              {window.gameCampaign && window.gameCampaign.selectedFactionRewards && 
+                window.gameCampaign.selectedFactionRewards.length > 0 ? (
+                // Map through unlocked abilities (up to 3)
+                window.gameCampaign.selectedFactionRewards.slice(0, 3).map((attackType, index) => {
+                  // Find the level data for this reward
+                  const levelData = window.gameCampaign.gameHistory.find(
+                    level => level.currentLevel === index + 1
+                  );
+                  
+                  return (
+                    <div key={index} className="flex items-center">
+                      <span className="inline-block text-sm font-bold bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center mr-2">
+                        {index + 1}
+                      </span>
+                      <span className="text-sm text-gray-700">
+                        {attackType} 
+                        <span className="text-xs text-gray-500 ml-2">
+                          (From {levelData?.selectedFaction || "unknown"})
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-sm text-gray-500">
+                  No special attacks unlocked yet. Complete levels to earn abilities.
+                </div>
+              )}
             </div>
           </div>
           
@@ -606,6 +655,48 @@ function FactionSelectScreen() {
     // Store player's faction choice
     window.gameUI.screenData.playerFaction = faction;
     
+    // Get the reward associated with this faction
+    const selectedReward = faction === window.gameCampaign.currentRedFaction 
+      ? window.gameCampaign.redFactionReward 
+      : window.gameCampaign.blueFactionReward;
+    
+    // Calculate the correct index for this level (0-based index)
+    const rewardIndex = window.gameCampaign.currentLevel - 1;
+    
+    console.log("Before update:", [...window.gameCampaign.selectedFactionRewards]); // Debug log
+    
+    // Update the selected reward at the appropriate position
+    window.gameCampaign.selectedFactionRewards[rewardIndex] = selectedReward;
+    
+    console.log("After update:", [...window.gameCampaign.selectedFactionRewards]); // Debug log
+    
+    // Store the selected faction for campaign tracking
+    window.gameCampaign.selectedFaction = faction;
+    
+    // Update the game history for the current level
+    const levelData = {
+      currentLevel: window.gameCampaign.currentLevel,
+      currentRedFaction: window.gameCampaign.currentRedFaction,
+      redFactionReward: window.gameCampaign.redFactionReward,
+      currentBlueFaction: window.gameCampaign.currentBlueFaction,
+      blueFactionReward: window.gameCampaign.blueFactionReward,
+      selectedFaction: faction,
+      selectedReward: selectedReward
+    };
+    
+    // Find if this level already exists in history
+    const existingLevelIndex = window.gameCampaign.gameHistory.findIndex(
+      level => level.currentLevel === window.gameCampaign.currentLevel
+    );
+    
+    if (existingLevelIndex >= 0) {
+      // Update existing record for this level
+      window.gameCampaign.gameHistory[existingLevelIndex] = levelData;
+    } else {
+      // Add new record for this level
+      window.gameCampaign.gameHistory.push(levelData);
+    }
+    
     // Switch to playing screen
     window.gameUI.currentScreen = "playing";
     
@@ -617,11 +708,13 @@ function FactionSelectScreen() {
     }
   };
 
-  // Get current factions and rewards directly from campaign
+  // Get current factions directly from campaign
   const redFaction = window.gameCampaign.currentRedFaction;
   const blueFaction = window.gameCampaign.currentBlueFaction;
-  const redReward = window.gameCampaign.redFactionReward;
-  const blueReward = window.gameCampaign.blueFactionReward;
+  
+  // Get rewards from the faction rewards map
+  const redReward = window.gameCampaign.factionRewards[redFaction] || "UNKNOWN";
+  const blueReward = window.gameCampaign.factionRewards[blueFaction] || "UNKNOWN";
 
   // Styles for fortress sprites - using inline styles for compatibility
   const fortressStyle: React.CSSProperties = {
@@ -663,6 +756,7 @@ function FactionSelectScreen() {
         {window.gameCampaign.gameHistory.length > 0 && (
           <p className="text-sm mb-4 text-center text-gray-600">
             Previous factions: {usedFactionsList}<br/>
+            Collected rewards: {window.gameCampaign.selectedFactionRewards.join(", ")}<br/>
             (Completed {window.gameCampaign.gameHistory.length} levels)
           </p>
         )}
@@ -824,6 +918,8 @@ declare global {
       redFactionReward: string;
       blueFactionReward: string;
       selectedFaction: string | null;
+      factionRewards: Record<string, string>;
+      selectedFactionRewards: string[];
       gameHistory: any[];
     };
     resetGame?: () => void;

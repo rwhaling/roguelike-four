@@ -117,6 +117,11 @@ export interface Campaign {
   currentRedFaction: string,
   currentBlueFaction: string,
   currentLevel: number,
+  redFactionReward: string,
+  blueFactionReward: string,
+  selectedFaction: string | null,
+  factionRewards: Record<string, string>, // Map of faction names to their rewards
+  selectedFactionRewards: string[], // Array to track rewards selected across levels
   gameHistory: CurrentLevel[]
 }
 
@@ -127,5 +132,6 @@ export interface CurrentLevel {
   currentBlueFaction: string,
   blueFactionReward: string,
   selectedFaction?: string,
+  selectedReward?: string, // The reward that was selected for this level
   gameHistory: any[]
 }

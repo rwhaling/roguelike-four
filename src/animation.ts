@@ -146,14 +146,14 @@ export class AnimationManager implements AnimationQueue {
             case AnimationState.MOVING:
                 if (animation.fromPosition && animation.toPosition) {
                     // Update visual position - add console.log for debugging
-                    console.log(`Animating sprite from (${animation.fromPosition.x},${animation.fromPosition.y}) to (${animation.toPosition.x},${animation.toPosition.y}) at progress ${progress}`);
+                    // console.log(`Animating sprite from (${animation.fromPosition.x},${animation.fromPosition.y}) to (${animation.toPosition.x},${animation.toPosition.y}) at progress ${progress}`);
                     
                     sprite.visualX = animation.fromPosition.x + 
                         (animation.toPosition.x - animation.fromPosition.x) * progress;
                     sprite.visualY = animation.fromPosition.y + 
                         (animation.toPosition.y - animation.fromPosition.y) * progress;
                     
-                    console.log(`New visual position: (${sprite.visualX},${sprite.visualY})`);
+                    // console.log(`New visual position: (${sprite.visualX},${sprite.visualY})`);
                 }
                 break;
                 
