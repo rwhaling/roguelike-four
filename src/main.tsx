@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { Howl, Howler } from 'howler';
 
 // Create campaign object to map colors to factions
 window.gameCampaign = {
@@ -58,6 +59,23 @@ window.gameUI = {
   }
 };
 
+// Create a global audio player
+// Create this near the top of the file where other window objects are defined
+window.gameAudio = {
+  bgMusic: new Howl({
+    src: ['barrow_2_v3_bounce_3.mp3'],
+    loop: true,
+    volume: 0.5,
+    autoplay: false
+  }),
+  isMuted: false,
+  toggleMute: function() {
+    this.isMuted = !this.isMuted;
+    Howler.mute(this.isMuted);
+    return this.isMuted;
+  }
+};
+
 // Now import test.ts after initialization
 import "./test";
 
@@ -69,7 +87,24 @@ function GameModals() {
   // Update UI state when window.gameUI changes
   React.useEffect(() => {
     const updateGameUI = () => {
-      setCurrentScreen(window.gameUI.currentScreen);
+      const newScreen = window.gameUI.currentScreen;
+      
+      // Manage music based on screen state
+      if (window.gameAudio && window.gameAudio.bgMusic) {
+        if (newScreen === "playing") {
+          // Resume music when playing
+          if (!window.gameAudio.bgMusic.playing() && !window.gameAudio.isMuted) {
+            window.gameAudio.bgMusic.play();
+          }
+        } else {
+          // Pause music when showing a modal
+          if (window.gameAudio.bgMusic.playing()) {
+            window.gameAudio.bgMusic.pause();
+          }
+        }
+      }
+      
+      setCurrentScreen(newScreen);
       setScreenData({...window.gameUI.screenData});
     };
     
@@ -77,7 +112,13 @@ function GameModals() {
     const intervalId = setInterval(updateGameUI, 100);
     
     // Cleanup on unmount
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      // Stop music when component unmounts
+      if (window.gameAudio && window.gameAudio.bgMusic) {
+        window.gameAudio.bgMusic.stop();
+      }
+    };
   }, []);
 
   // Render different screens based on currentScreen value
@@ -706,6 +747,11 @@ function FactionSelectScreen() {
     } else {
       console.error("startGameWithFaction function not found in test.ts");
     }
+    
+    // Start background music when faction is selected (required user interaction)
+    if (!window.gameAudio.bgMusic.playing()) {
+      window.gameAudio.bgMusic.play();
+    }
   };
 
   // Get current factions directly from campaign
@@ -926,6 +972,11 @@ declare global {
     retryCurrentLevel?: () => void;
     startNewCampaign?: () => void;
     startGameWithFaction?: (faction: string) => void;
+    gameAudio: {
+      bgMusic: Howl;
+      isMuted: boolean;
+      toggleMute: () => boolean;
+    };
   }
 }
 

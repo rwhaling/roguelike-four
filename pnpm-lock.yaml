@@ -17,6 +17,9 @@ importers:
       gsap:
         specifier: ^3.12.7
         version: 3.12.7
+      howler:
+        specifier: ^2.2.4
+        version: 2.2.4
       p5:
         specifier: ^1
         version: 1.11.3
@@ -578,6 +581,9 @@ packages:
 
   gsap@3.12.7:
     resolution: {integrity: sha512-V4GsyVamhmKefvcAKaoy0h6si0xX7ogwBoBSs2CTJwt7luW0oZzC0LhdkyuKV8PJAXr7Yaj8pMjCKD4GJ+eEMg==}
+
+  howler@2.2.4:
+    resolution: {integrity: sha512-iARIBPgcQrwtEr+tALF+rapJ8qSc+Set2GJQl7xT1MQzWaVkFebdJhR3alVlSiUf5U7nAANKuj3aWpwerocD5w==}
 
   jiti@2.4.2:
     resolution: {integrity: sha512-rg9zJN+G4n2nfJl5MW3BMygZX56zKPNVEYYqq7adpmMh4Jn2QNEwhvQlFy6jPVdcod7txZtKHWnyZiA3a0zP7A==}
@@ -1218,6 +1224,8 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   gsap@3.12.7: {}
+
+  howler@2.2.4: {}
 
   jiti@2.4.2: {}
 
