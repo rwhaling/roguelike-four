@@ -91,15 +91,18 @@ function GameModals() {
       
       // Manage music based on screen state
       if (window.gameAudio && window.gameAudio.bgMusic) {
-        if (newScreen === "playing") {
-          // Resume music when playing
-          if (!window.gameAudio.bgMusic.playing() && !window.gameAudio.isMuted) {
-            window.gameAudio.bgMusic.play();
-          }
-        } else {
-          // Pause music when showing a modal
+        if (newScreen === "campaignVictory") {
+          // Only stop music at campaign victory
           if (window.gameAudio.bgMusic.playing()) {
             window.gameAudio.bgMusic.pause();
+          }
+        } else if (newScreen === "playing" || newScreen === "factionSelect" || newScreen === "gameOver" || newScreen === "levelVictory") {
+          // Keep music playing during gameplay, level selection, game over, and level victory
+          if (!window.gameAudio.bgMusic.playing() && !window.gameAudio.isMuted) {
+            // console.log("PLAYING MUSIC");
+            window.gameAudio.bgMusic.volume(0.5);
+            window.gameAudio.bgMusic.stop();
+            window.gameAudio.bgMusic.play();
           }
         }
       }
@@ -290,11 +293,9 @@ function GameParametersApp() {
   const stats = parsePerformanceStats(gameParameters.performanceStats);
   
   return (
-    <div className="w-full max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-xl font-bold mb-6 text-gray-700">Game Parameters</h2>
-      
-      {/* Game Status (Read-only fields) - MOVED UP */}
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+    <div className="w-full max-w-2xl mx-auto">
+      {/* Only rendering the game status panel */}
+      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
         <h3 className="text-lg font-semibold mb-3 text-gray-700">Game Status</h3>
         
         <div className="grid grid-cols-2 gap-4">
@@ -320,7 +321,7 @@ function GameParametersApp() {
             </div>
           </div>
           
-          {/* Player stats - MODIFIED TO SINGLE ROW */}
+          {/* Player stats */}
           <div className="col-span-2 md:col-span-1">
             <h4 className="font-medium text-sm text-gray-600 mb-2">Player</h4>
             <div className="flex items-center gap-2">
@@ -361,7 +362,7 @@ function GameParametersApp() {
                         {index + 1}
                       </span>
                       <span className="text-sm text-gray-700">
-                        {attackType} 
+                        {attackType} <span className="font-bold">[PRESS {index + 1}]</span>
                         <span className="text-xs text-gray-500 ml-2">
                           (From {levelData?.selectedFaction || "unknown"})
                         </span>
@@ -440,252 +441,8 @@ function GameParametersApp() {
         </div>
       </div>
       
-      {/* Movement Speed */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Move Speed</label>
-        <input
-          type="range"
-          min="10"
-          max="500"
-          step="10"
-          value={gameParameters.moveSpeed}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseFloat(e.target.value);
-            window.gameParams.moveSpeed = value;
-            setGameParameters({...window.gameParams, moveSpeed: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.moveSpeed}
-        </span>
-      </div>
-      
-      {/* Max Red Count (formerly Max Orc Count) */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Max {window.gameCampaign.currentRedFaction}</label>
-        <input
-          type="range"
-          min="0"
-          max="50"
-          step="1"
-          value={gameParameters.maxRedCount}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            window.gameParams.maxRedCount = value;
-            setGameParameters({...window.gameParams, maxRedCount: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.maxRedCount}
-        </span>
-      </div>
-      
-      {/* Max Blue Count (formerly Max Undead Count) */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Max {window.gameCampaign.currentBlueFaction}</label>
-        <input
-          type="range"
-          min="0"
-          max="50"
-          step="1"
-          value={gameParameters.maxBlueCount}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            window.gameParams.maxBlueCount = value;
-            setGameParameters({...window.gameParams, maxBlueCount: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.maxBlueCount}
-        </span>
-      </div>
-      
-      {/* Red Respawn Rate (formerly Orc Respawn Rate) */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">{window.gameCampaign.currentRedFaction} Respawn</label>
-        <input
-          type="range"
-          min="100"
-          max="10000"
-          step="100"
-          value={gameParameters.redRespawnRate}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            window.gameParams.redRespawnRate = value;
-            setGameParameters({...window.gameParams, redRespawnRate: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.redRespawnRate}ms
-        </span>
-      </div>
-      
-      {/* Blue Respawn Rate */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Blue Respawn</label>
-        <input
-          type="range"
-          min="100"
-          max="10000"
-          step="100"
-          value={gameParameters.blueRespawnRate}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            window.gameParams.blueRespawnRate = value;
-            setGameParameters({...window.gameParams, blueRespawnRate: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.blueRespawnRate}ms
-        </span>
-      </div>
-      
-      {/* Map Size - map regenerates immediately when this changes */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Map Size</label>
-        <input
-          type="range"
-          min="10"
-          max="50"
-          step="1"
-          value={gameParameters.mapSize}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            handleMapSizeChange(value);
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.mapSize}×{gameParameters.mapSize}
-        </span>
-      </div>
-      
-      {/* Lighting Toggle */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Lighting</label>
-        <div className="flex-grow">
-          <input
-            type="checkbox"
-            checked={gameParameters.lightingEnabled}
-            onChange={(e) => {
-              const value = e.target.checked;
-              window.gameParams.lightingEnabled = value;
-              setGameParameters({...window.gameParams, lightingEnabled: value});
-            }}
-          />
-          <span className="ml-2 text-gray-600">Enable lighting effects</span>
-        </div>
-      </div>
-      
-      {/* Camera Zoom */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Camera Zoom</label>
-        <input
-          type="range"
-          min="4.0"
-          max="32.0"
-          step="0.5"
-          value={gameParameters.zoom}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseFloat(e.target.value);
-            window.gameParams.zoom = value;
-            setGameParameters({...window.gameParams, zoom: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.zoom.toFixed(1)}
-        </span>
-      </div>
-      
-      {/* Max Red Champions */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Max Red Champions</label>
-        <input
-          type="range"
-          min="0"
-          max="10"
-          step="1"
-          value={gameParameters.maxRedChampions}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            window.gameParams.maxRedChampions = value;
-            setGameParameters({...window.gameParams, maxRedChampions: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.maxRedChampions}
-        </span>
-      </div>
-      
-      {/* Max Blue Champions */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Max Blue Champions</label>
-        <input
-          type="range"
-          min="0"
-          max="10"
-          step="1"
-          value={gameParameters.maxBlueChampions}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            window.gameParams.maxBlueChampions = value;
-            setGameParameters({...window.gameParams, maxBlueChampions: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.maxBlueChampions}
-        </span>
-      </div>
-      
-      {/* Red Champion Spawn % */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Red Champion %</label>
-        <input
-          type="range"
-          min="0"
-          max="50"
-          step="1"
-          value={gameParameters.redChampionSpawnChance}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            window.gameParams.redChampionSpawnChance = value;
-            setGameParameters({...window.gameParams, redChampionSpawnChance: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.redChampionSpawnChance}%
-        </span>
-      </div>
-      
-      {/* Blue Champion Spawn % */}
-      <div className="mb-4 flex items-center gap-4">
-        <label className="w-32 font-medium text-gray-700">Blue Champion %</label>
-        <input
-          type="range"
-          min="0"
-          max="50"
-          step="1"
-          value={gameParameters.blueChampionSpawnChance}
-          className="flex-grow"
-          onChange={(e) => {
-            const value = parseInt(e.target.value);
-            window.gameParams.blueChampionSpawnChance = value;
-            setGameParameters({...window.gameParams, blueChampionSpawnChance: value});
-          }}
-        />
-        <span className="w-16 text-right text-gray-600">
-          {gameParameters.blueChampionSpawnChance}%
-        </span>
-      </div>
+      {/* All the slider controls and other UI elements are no longer rendered here */}
+      {/* But we keep all the state management and handlers intact */}
     </div>
   );
 }
@@ -802,8 +559,7 @@ function FactionSelectScreen() {
         {window.gameCampaign.gameHistory.length > 0 && (
           <p className="text-sm mb-4 text-center text-gray-600">
             Previous factions: {usedFactionsList}<br/>
-            Collected rewards: {window.gameCampaign.selectedFactionRewards.join(", ")}<br/>
-            (Completed {window.gameCampaign.gameHistory.length} levels)
+            Collected rewards: {window.gameCampaign.selectedFactionRewards.join(", ")}
           </p>
         )}
         
@@ -814,7 +570,7 @@ function FactionSelectScreen() {
           >
             <h3 className="text-2xl font-bold text-red-700 mb-2">{redFaction.charAt(0).toUpperCase() + redFaction.slice(1)}</h3>
             <p className="mb-2">Red warrior faction with strong melee units.</p>
-            <p className="mb-4 text-sm font-semibold">Reward: {redReward}</p>
+            <p className="mb-4 text-sm font-semibold">Reward: {redReward} <span className="font-bold">[PRESS {window.gameCampaign.currentLevel}]</span></p>
             <div className="text-center p-4 bg-red-200 rounded flex justify-center items-center" style={{ minHeight: '100px' }}>
               <div style={redFortressStyle}></div>
             </div>
@@ -826,7 +582,7 @@ function FactionSelectScreen() {
           >
             <h3 className="text-2xl font-bold text-blue-700 mb-2">{blueFaction.charAt(0).toUpperCase() + blueFaction.slice(1)}</h3>
             <p className="mb-2">Blue undead faction with necromantic powers.</p>
-            <p className="mb-4 text-sm font-semibold">Reward: {blueReward}</p>
+            <p className="mb-4 text-sm font-semibold">Reward: {blueReward} <span className="font-bold">[PRESS {window.gameCampaign.currentLevel}]</span></p>
             <div className="text-center p-4 bg-blue-200 rounded flex justify-center items-center" style={{ minHeight: '100px' }}>
               <div style={blueFortressStyle}></div>
             </div>

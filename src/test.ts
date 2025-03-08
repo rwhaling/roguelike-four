@@ -395,7 +395,7 @@ function handleSpriteDefeat(sprite: Sprite, attacker: Sprite | null) {
         const defeatedY = sprite.y;
         
         // Define the death animation duration
-        const deathDuration = 300; // Same as the default in triggerDeathAnimation
+        const deathDuration = 100; // Same as the default in triggerDeathAnimation
         
         // Create a copy of the sprite with proper animation timing
         const dyingSpriteCopy = {...sprite, 
@@ -832,7 +832,7 @@ function performSpecialAttackOne(sprite: Sprite) {
             
                 particles.push(newParticle);
                 gsap.to(newParticle, {
-                    duration: 0.15,
+                    duration: 0.25,
                     ease: "power1.in",
                     repeat: 0,
                     yoyo: true,
@@ -909,7 +909,7 @@ function performSpecialAttackTwo(sprite: Sprite) {
             particles.push(newParticle);
             gsap.to(newParticle, {
                 delay: 0,
-                duration: 0.15 + (dist - 1) * 0.05,
+                duration: 0.20 + (dist - 1) * 0.05,
                 ease: "power2.inOut",
                 repeat: 0,
                 colorSwapG: 0.5,
@@ -975,7 +975,7 @@ function performSpecialAttackThree(sprite: Sprite) {
             particles.push(newParticle);
             gsap.to(newParticle, {
                 delay: (dist - 1) * 0.01,
-                duration: 0.15 + (dist - 1) * 0.02,
+                duration: 0.20 + (dist - 1) * 0.02,
                 ease: "power2.out",
                 repeat: 0,
                 colorSwapG: 0.5,
@@ -2141,19 +2141,44 @@ function draw_frame(timestamp: number) {
     // Update animations
     updateAnimations(now);
 
+    // Update the part in draw_frame function where performance stats are updated:
     const frameEndTime = performance.now();
     const frameDuration = frameEndTime - frameStartTime;
     const fps = 1000 / (frameEndTime - lastFrameTime);
 
-    // First set the base performance metrics
+    // Build performance stats string
     let performanceStats = `Render time: ${frameDuration.toFixed(2)}ms | FPS: ${fps.toFixed(2)}`;
-    
-    // Then add player health and faction information using a differently named variable
-    const statsInfo = displayPlayerHealth();
-    if (statsInfo && statsInfo.length > 0) {
-        performanceStats += ` | ${statsInfo}`;
+
+    // Add player health and faction information
+    if (sprite1) {
+        performanceStats += ` | Health: ${sprite1.hitpoints}/${sprite1.maxHitpoints}`;
+        performanceStats += ` | Stamina: ${sprite1.stamina}/${sprite1.maxStamina}`;
     }
-    
+
+    // Count units by faction
+    const redFaction = window.gameCampaign.currentRedFaction;
+    const blueFaction = window.gameCampaign.currentBlueFaction;
+    const unitCounts = countNpcsByFaction();
+
+    // Add unit count information
+    performanceStats += `, Red: ${unitCounts[redFaction] || 0}/${window.gameParams.maxRedCount}`;
+    performanceStats += `, Blue: ${unitCounts[blueFaction] || 0}/${window.gameParams.maxBlueCount}`;
+
+    // Add champion count information
+    performanceStats += `, Champions: Red ${redChampions}/${window.gameParams.maxRedChampions}`;
+    performanceStats += `, Blue ${blueChampions}/${window.gameParams.maxBlueChampions}`;
+
+    // Add fortress information in the exact format expected by the regex
+    const redFortress = fortresses.find(f => f.faction === redFaction);
+    const blueFortress = fortresses.find(f => f.faction === blueFaction);
+
+    if (redFortress) {
+        performanceStats += `, red fortress: (${redFortress.x},${redFortress.y}) HP: ${redFortress.hitpoints}/${redFortress.maxHitpoints}`;
+    }
+    if (blueFortress) {
+        performanceStats += `, blue fortress: (${blueFortress.x},${blueFortress.y}) HP: ${blueFortress.hitpoints}/${blueFortress.maxHitpoints}`;
+    }
+
     // Finally update the window.gameParams
     window.gameParams.performanceStats = performanceStats;
 
