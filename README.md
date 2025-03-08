@@ -1,21 +1,24 @@
-# React + Richard's WebGL Engine Starter template
+# Aeon Shifters [7DRL Edition]
 
-Based on etgrieco's immaculate [p5-vite-typescript-template](https://github.com/etgrieco/p5-vite-typescript-template)
+Source code for the Aeon Shifters [7DRL Edition], a 7-day Roguelike built for the 2025 7DRL Jam.  Play it here:
 
-Features::
-- [vite](https://vite.dev/) as a development server + build tooling
-    - HMR for automatic refreshing of changes on save
-- TypeScript 
-- TailwindCSS if you would like to use that to style your HTML elements outside of your p5.js canvas.
-- WebGL sprite engine extracted from [Barrow 2](https://github.com/rwhaling/roguelike-three)
+https://rwhaling.itch.io/aeon-shifters
 
-- TODO: supply non-license encumbered assets - Barrow 2 used a set by Oryx Design Lab that I cannot redistribute, but there are plent of other great ones available.
+## What is it?
 
-## Using the template
+Aeon Shifters is a fast-paced hack and slash action Roguelike, drawing on Dynasty Warriors, Diablo, and others.  The player forms alliances with different factions in large-scale battles, and each faction offers a unique special move as a reward.  By choosing your allies, you create a cusomized build - by my count, there are 120 possible builds at end-game.
 
-1. Copy the template to your github.
-1. Run `pnpm install`
-1. Start coding in `main.tsx`!
+Controls: WASD movement, QEZC horizontal movement, bump to regular attack, 1/2/3 for special attacks.  Health and stamina regenerate, killing enemies with regular attacks also regenerates stamina.  Special moves all cost 2 stamina.
+
+## Credits
+WebGL engine is based on the engine from [Barrow 2](https://github.com/rwhaling/roguelike-three), with significant modifications to the sprite engine to allow for more particle effects.  Barrow 2 itself drew on Ondrej Zara's https://github.com/ondras/rot.js/, as well as chr15m's https://github.com/chr15m/roguelike-browser-boilerplate.
+
+The TypeScript/react architecture is based on etgrieco's immaculate [p5-vite-typescript-template](https://github.com/etgrieco/p5-vite-typescript-template).  Used Vite for the first time on this project, it's been amazing.
+
+Thanks also to Jim Kang, Bradley Dettmer, and Alex McKendry for pairing and feedback during the development process.  
+
+Sprites: Phosphor by Loren Schmidt, https://lorenschmidt.itch.io/phosphor
+Music: by me, borrowed from Barrow 2.
 
 ## Building for distribution
 
@@ -24,94 +27,8 @@ Features::
 3. cp -r bg_edits_1.png fg_characters.png dist
 4. zip -rXq aeon_shifters.zip dist
 
-### Changing package managers
-
-Remove `pnpm-lock.yaml`, change/remove the `"packageManager"` field from `package.json`, and replace with a package manager of your choice (npm, yarn, bun, etc.)
-
-### Removing Tailwind
-
-If you have no use for Tailwind, update `vite.config.ts`.
-
-```diff
-import { defineConfig } from "vite";
-- import tailwindcss from "@tailwindcss/vite";
-
-export default defineConfig({
--  plugins: [tailwindcss()],
-});
-```
-
-and `styles.css`
-
-```diff
-- @import "tailwindcss";
-
-+ .my-styles {
-+    /* My CSS goes here <3 */
-+ }
-```
-
-## Steps to set this up yourself
-
-If this project becomes out of date, here are the fundamentals behind what is happening:
-
-1. `pnpm create vite` (feel free to use any package manager of your choice)
-1. Create a `Vanilla` project
-1. (optional) Create a `vite.config.ts` file with preferences to build p5 as a separate chunk
-    - Note: we do this the help preserve bandwidth for your users. We assume your application code is going to change more frequently than your P5 version. This helps to avoid users from having to re-download P5.js over and over again.
-    ```ts
-    import { defineConfig } from "vite";
-    import tailwindcss from "@tailwindcss/vite";
-
-    export default defineConfig({
-          build: {
-            rollupOptions: {
-                output: {
-                    manualChunks: {
-                        p5: ["p5"],
-                    },
-                },
-            },
-        },
-    });
-    ```
-1. (optional) Add TailwindCSS
-    - Create a `vite.config.ts` file; add the vite TailwindCSS plugin to your project
-    - Add a `styles.css` file to your project.
-        ```css
-        @import "tailwindcss";
-        ```
-    - Ensure you're adding `styles.css` to your `index.html` or `main.ts` file
-        ```html
-        <link href="/src/styles.css" rel="stylesheet">
-        ```
-        or
-
-        ```ts
-        import "./styles.css"
-        ```
-1. Delete the entirety of the `main.ts` counter boilerplate
-1. Create any mounting node(s) necessary within your `index.html`; this is what p5 will mount its canvas to.
-1. Create a p5 factory function that allows to start p5 in instance mode. All p5 "globals" will be instead attached to this instance, allowing you to utilize and browse all the utility features of p5 without polluting the global scope.
-    ```ts
-    function myP5(p: p5) {
-    // user code goes here
-    Object.assign(p, {
-        preload() {
-            // ...
-        },
-        setup() {
-            // ...
-        },
-        draw() {
-            // ...
-        },
-        } satisfies Pick<typeof p, "preload" | "setup" | "draw">);
-    }
-    ```
-1. Get started building your p5.js work!
 
 # Credits
 
-# 
+
 * `Inconsolata` font included for demonstration purposes; [Inconsolata font license](https://www.fontsquirrel.com/license/Inconsolata).
